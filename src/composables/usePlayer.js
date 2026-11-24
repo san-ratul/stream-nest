@@ -207,6 +207,14 @@ export async function playerGetHwdec() {
   }
 }
 
+export async function playerGetPaused() {
+  try {
+    return await getProperty("pause", "flag");
+  } catch {
+    return null;
+  }
+}
+
 export async function playerRenderDiagnostics() {
   try {
     const [voConfigured, currentVo, videoFrames, displayRate, hwdecFailed, videoDetected, mL, mR, mT, mB] = await Promise.all([

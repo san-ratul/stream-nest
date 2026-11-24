@@ -10,6 +10,7 @@ import {
   playerSeek,
   playerSetVolume,
   playerGetHwdec,
+  playerGetPaused,
   playerGetTrackList,
   playerSetAudioTrack,
   playerSetSubtitleTrack,
@@ -73,7 +74,6 @@ const timelineValue = computed(() =>
 const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
 const ASPECTS = [
   { label: "auto", value: "-1" },
-  { label: "fill", value: "stretch" },
   { label: "16:9", value: "16:9" },
   { label: "4:3", value: "4:3" },
   { label: "2.35:1", value: "2.35" },
@@ -282,6 +282,12 @@ onMounted(async () => {
   probeTimer = setInterval(async () => {
     playerGetHwdec();
     refreshTracks();
+    try {
+      const p = await playerGetPaused();
+      if (p != null && p !== playerState.paused) playerState.paused = p;
+    } catch {
+      // pause sync is best-effort
+    }
     const diag = await playerRenderDiagnostics();
     const src = sourceTorrent.value;
     const dl = src ? `${fmtBytes(src.stats?.downloaded_bytes ?? 0)}/${fmtBytes(src.stats?.total_bytes ?? 0)}` : "n/a";
