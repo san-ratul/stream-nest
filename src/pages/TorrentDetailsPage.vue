@@ -20,6 +20,7 @@ const router = useRouter();
 
 const details = ref(null);
 const stats = ref(null);
+const peers = ref({});
 const error = ref(null);
 const busy = ref(false);
 const selected = ref(new Set());
@@ -57,6 +58,10 @@ async function refresh() {
 async function refreshStats() {
   try {
     stats.value = await invoke("torrent_stats", { id: id.value });
+    peers.value = await invoke("torrent_peer_stats", {
+      id: id.value,
+      filter: { state: "live" },
+    });
   } catch {
     stats.value = null;
   }
@@ -174,7 +179,32 @@ async function streamSelected() {
 
       <p v-if="error" class="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">{{ error }}</p>
 
-      <section>
+      <section v-if="Object.keys(peers).length">
+        <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Peers ({{ Object.keys(peers).length }} live)
+        </h2>
+        <div class="overflow-hidden rounded-lg border border-slate-700/60">
+          <div class="grid grid-cols-[1fr_1fr_90px_110px_110px_70px] gap-2 border-b border-slate-800 bg-slate-800/60 px-4 py-2 text-xs uppercase tracking-wide text-slate-400">
+            <span>Address</span><span>Client</span><span>State</span><span>Kind</span><span>Down / Up</span><span>Err</span>
+          </div>
+          <div
+            v-for="(p, addr) in peers"
+            :key="addr"
+            class="grid grid-cols-[1fr_1fr_90px_110px_110px_70px] gap-2 border-b border-slate-800 px-4 py-2 text-sm text-slate-300 last:border-b-0"
+          >
+            <span class="truncate font-mono text-xs">{{ addr }}</span>
+            <span class="truncate text-slate-400">{{ p.client_name ?? "unknown" }}</span>
+            <span class="text-xs">{{ p.state ?? "?" }}</span>
+            <span class="text-xs">{{ p.conn_kind ?? "?" }}</span>
+            <span class="text-xs text-slate-400">
+              ↓{{ fmtBytes(p.counters?.fetched_bytes) }} ↑{{ fmtBytes(p.counters?.uploaded_bytes) }}
+            </span>
+            <span class="text-xs" :class="p.counters?.errors ? 'text-red-300' : 'text-slate-500'">{{ p.counters?.errors ?? 0 }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="hasMetadata">
         <h2 class="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Files</h2>
         <AppState
           v-if="!hasMetadata"
