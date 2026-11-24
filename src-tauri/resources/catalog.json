@@ -1,0 +1,50 @@
+[
+  {
+    "id": "bbb-2008",
+    "title": "Big Buck Bunny",
+    "year": 2008,
+    "description": "A big rabbit takes revenge on three bullying rodents in this Blender Foundation open movie. Entirely made with free and open-source software.",
+    "genres": ["Animation", "Comedy", "Family"],
+    "duration_minutes": 10,
+    "source_name": "Blender Foundation — Peach project",
+    "source_url": "https://peach.blender.org",
+    "license": "CC-BY 3.0",
+    "license_url": "https://peach.blender.org/about/"
+  },
+  {
+    "id": "sintel-2010",
+    "title": "Sintel",
+    "year": 2010,
+    "description": "A lonely young woman, Sintel, helps and befriends a dragon she names Scales. Lost and injured, she journeys across a hostile world to find him again. Blender Foundation open movie.",
+    "genres": ["Animation", "Fantasy", "Adventure"],
+    "duration_minutes": 15,
+    "source_name": "Blender Foundation — Durian project",
+    "source_url": "https://durian.blender.org",
+    "license": "CC-BY 3.0",
+    "license_url": "https://durian.blender.org/about/"
+  },
+  {
+    "id": "cosmos-2015",
+    "title": "Cosmos Laundromat — First Cycle",
+    "year": 2015,
+    "description": "A depressed sheep named Frank wishes for a second chance and meets a strange salesman who offers him exactly that. Blender Foundation open movie (first cycle).",
+    "genres": ["Animation", "Comedy", "Drama"],
+    "duration_minutes": 12,
+    "source_name": "Blender Foundation — Gooseberry project",
+    "source_url": "https://gooseberry.blender.org",
+    "license": "CC-BY 4.0",
+    "license_url": "https://gooseberry.blender.org/about/"
+  },
+  {
+    "id": "tos-2012",
+    "title": "Tears of Steel",
+    "year": 2012,
+    "description": "In a future Amsterdam, a group of warriors and scientists recreate the past to save the world from robots. Blender Foundation open movie, live action combined with CGI.",
+    "genres": ["Animation", "Sci-Fi", "Action"],
+    "duration_minutes": 12,
+    "source_name": "Blender Foundation — Mango project",
+    "source_url": "https://mango.blender.org",
+    "license": "CC-BY 3.0",
+    "license_url": "https://mango.blender.org/about/"
+  }
+]

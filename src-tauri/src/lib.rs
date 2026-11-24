@@ -1,3 +1,4 @@
+pub mod catalog;
 mod commands;
 mod engine;
 mod events;
@@ -28,12 +29,17 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             app.manage(engine::EngineState::new());
+            app.manage(catalog::CatalogState {
+                provider: Box::new(catalog::provider::BundledProvider::new()),
+            });
             tauri::async_runtime::spawn(engine::init(handle));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             health,
             dev_log,
+            catalog::catalog_list,
+            catalog::catalog_get,
             commands::engine_status,
             commands::torrent_add_uri,
             commands::torrent_add_file_base64,
