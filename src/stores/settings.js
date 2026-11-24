@@ -1,6 +1,5 @@
 import { reactive, watch } from "vue";
-
-const KEY = "streamnest.settings.v1";
+import { invoke } from "@tauri-apps/api/core";
 
 const DEFAULTS = {
   downloadDir: "",
@@ -18,29 +17,53 @@ const DEFAULTS = {
   pauseTorrentsOnExit: true,
 };
 
-function load() {
+export const settingsStore = reactive({ ...DEFAULTS });
+
+let hydrated = false;
+let saveTimer = null;
+
+export async function hydrateSettings() {
+  if (hydrated) return;
+  hydrated = true;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULTS };
+    const rows = await invoke("settings_get_all");
+    for (const [key, value] of rows ?? []) {
+      if (key in settingsStore) {
+        const current = settingsStore[key];
+        if (typeof current === "number") {
+          const n = Number(value);
+          settingsStore[key] = Number.isFinite(n) ? n : current;
+        } else if (typeof current === "boolean") {
+          settingsStore[key] = value === "true";
+        } else {
+          settingsStore[key] = value;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("settings hydration failed", err);
   }
+
+  watch(
+    settingsStore,
+    () => {
+      if (!hydrated) return;
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(persistAll, 400);
+    },
+    { deep: true }
+  );
 }
 
-export const settingsStore = reactive(load());
-
-watch(
-  settingsStore,
-  () => {
+async function persistAll() {
+  for (const [key, value] of Object.entries(settingsStore)) {
     try {
-      localStorage.setItem(KEY, JSON.stringify(settingsStore));
-    } catch {
-      // storage unavailable; settings stay in memory
+      await invoke("settings_set", { key, value: String(value) });
+    } catch (err) {
+      console.warn(`settings save failed for ${key}`, err);
     }
-  },
-  { deep: true }
-);
+  }
+}
 
 export function resetSettings() {
   Object.assign(settingsStore, DEFAULTS);

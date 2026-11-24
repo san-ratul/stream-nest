@@ -25,6 +25,7 @@ const error = ref(null);
 const busy = ref(false);
 const selected = ref(new Set());
 const streamTarget = ref(null);
+const isFavorite = ref(false);
 let pollTimer = null;
 
 const VIDEO_EXTS = ["mp4", "mkv", "avi", "webm", "mov", "m4v", "ts"];
@@ -49,6 +50,38 @@ async function refresh() {
       files.value.forEach((f, i) => {
         if (isVideo(f)) selected.value.add(i);
       });
+    }
+    const hash = details.value?.info_hash;
+    if (hash && !registered) {
+      registered = true;
+      invoke("db_upsert_torrent", {
+        infoHash: hash,
+        name: details.value?.name ?? "unknown",
+        outputFolder: details.value?.output_folder ?? null,
+      }).catch(() => {});
+      const favs = await invoke("favorites_list");
+      isFavorite.value = (favs ?? []).some((f) => f.media_key === hash);
+    }
+  } catch (err) {
+    error.value = String(err?.message ?? err);
+  }
+}
+
+let registered = false;
+
+async function toggleFavorite() {
+  const hash = details.value?.info_hash;
+  if (!hash) return;
+  try {
+    if (isFavorite.value) {
+      await invoke("favorites_remove", { mediaKey: hash });
+      isFavorite.value = false;
+    } else {
+      await invoke("favorites_add", {
+        mediaKey: hash,
+        title: details.value?.name ?? "video",
+      });
+      isFavorite.value = true;
     }
   } catch (err) {
     error.value = String(err?.message ?? err);
@@ -125,6 +158,7 @@ async function streamSelected() {
       title: files.value[index]?.name ?? details.value?.name ?? "stream",
       torrentId: id.value,
       fileId: index,
+      infoHash: details.value?.info_hash ?? null,
     });
     router.push("/player");
   } catch (err) {
@@ -168,6 +202,14 @@ async function streamSelected() {
         </button>
         <button class="rounded-md bg-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-600 disabled:opacity-50" :disabled="busy" @click="saveSelection">
           Save file selection
+        </button>
+        <button
+          class="rounded-md px-4 py-2 text-sm hover:bg-slate-600 disabled:opacity-50"
+          :class="isFavorite ? 'bg-amber-500/25 text-amber-200' : 'bg-slate-700 text-slate-200'"
+          :disabled="busy"
+          @click="toggleFavorite"
+        >
+          {{ isFavorite ? "★ Favorited" : "☆ Favorite" }}
         </button>
         <button class="rounded-md bg-red-500/20 px-4 py-2 text-sm text-red-300 hover:bg-red-500/30 disabled:opacity-50" :disabled="busy" @click="removeTorrent">
           Delete (with files)

@@ -19,7 +19,7 @@ import {
   playerAddExternalSubtitle,
 } from "../composables/usePlayer";
 import { invoke } from "@tauri-apps/api/core";
-import { playerStore } from "../stores/player";
+import { playerStore, mediaKey } from "../stores/player";
 import { torrentStore, fmtSpeed } from "../stores/torrents";
 import AppState from "../components/common/AppState.vue";
 
@@ -31,9 +31,12 @@ const aspect = ref("auto");
 const tracks = ref([]);
 const subtitleFile = ref(null);
 const controlError = ref(null);
+const resumeNote = ref(null);
 let probeTimer = null;
 let lastTime = null;
 let stallSeconds = 0;
+let lastSaveSeconds = 0;
+let resumed = false;
 
 const appWindow = getCurrentWebviewWindow();
 
@@ -55,6 +58,44 @@ const ASPECTS = [
   { label: "4:3", value: "4:3" },
   { label: "2.35:1", value: "2.35" },
 ];
+
+function currentMediaKey() {
+  return mediaKey(playerStore.infoHash, playerStore.fileId);
+}
+
+async function maybeResume() {
+  if (resumed || !currentMediaKey()) return;
+  try {
+    const rows = await invoke("history_list", { limit: 100 });
+    const row = (rows ?? []).find((r) => r.media_key === currentMediaKey());
+    if (row && row.position_seconds > 30 && row.duration_seconds > 0 && row.position_seconds < row.duration_seconds * 0.95) {
+      playerSeek(row.position_seconds);
+      resumeNote.value = `Resumed from ${fmt(row.position_seconds)}`;
+      setTimeout(() => (resumeNote.value = null), 5000);
+    }
+    resumed = true;
+  } catch {
+    resumed = true;
+  }
+}
+
+async function saveProgress(final = false) {
+  const key = currentMediaKey();
+  const pos = playerState.timePos;
+  if (!key || pos == null || pos < 1 || playerState.duration == null) return;
+  if (!final && Math.abs(pos - lastSaveSeconds) < 5) return;
+  lastSaveSeconds = pos;
+  try {
+    await invoke("history_upsert", {
+      mediaKey: key,
+      title: playerStore.title ?? "video",
+      positionSeconds: pos,
+      durationSeconds: playerState.duration,
+    });
+  } catch {
+    // progress persistence is best-effort during playback
+  }
+}
 
 function onKeydown(e) {
   const tag = document.activeElement?.tagName;
@@ -128,11 +169,17 @@ async function onSubtitleFile() {
   }
 }
 
-onMounted(() => {
-  playerInit().then(async () => {
-    if (playerStore.src) await playerLoad(playerStore.src);
-    await refreshTracks();
-  });
+onMounted(async () => {
+  await playerInit();
+  if (playerStore.src) await playerLoad(playerStore.src);
+  await refreshTracks();
+  if (currentMediaKey()) {
+    invoke("library_add", {
+      mediaKey: currentMediaKey(),
+      title: playerStore.title ?? "video",
+      path: null,
+    }).catch(() => {});
+  }
   probeTimer = setInterval(async () => {
     playerGetHwdec();
     refreshTracks();
@@ -150,13 +197,16 @@ onMounted(() => {
       playerState.buffering = false;
     }
     lastTime = t;
+    if (playerState.duration != null && playerState.duration > 0) await maybeResume();
+    await saveProgress(false);
   }, 1000);
   window.addEventListener("keydown", onKeydown);
 });
 
-onUnmounted(() => {
+onUnmounted(async () => {
   clearInterval(probeTimer);
   window.removeEventListener("keydown", onKeydown);
+  await saveProgress(true);
   if (fullscreen.value) appWindow.setFullscreen(false).catch(() => {});
   playerDestroy();
 });
@@ -219,6 +269,7 @@ function fmt(t) {
       <span class="max-w-[360px] truncate font-medium text-slate-100">{{ playerStore.title ?? "" }}</span>
       <span>hwdec: {{ playerState.hwdec ?? "?" }}</span>
       <span>codec: {{ playerState.videoFormat ?? "?" }}</span>
+      <span v-if="resumeNote" class="rounded bg-sky-500/20 px-2 py-0.5 text-sky-300">{{ resumeNote }}</span>
       <span v-if="speed !== 1" class="rounded bg-violet-500/20 px-1.5 text-violet-300">{{ speed }}×</span>
       <span v-if="playerState.buffering" class="animate-pulse rounded bg-amber-500/20 px-2 py-0.5 text-amber-300">
         buffering…
@@ -310,7 +361,7 @@ function fmt(t) {
           class="max-w-[160px] rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
           @change="selectAudio($event.target.value)"
         >
-          <option value="">audio track…</option>
+          <option value="" disabled selected>audio…</option>
           <option v-for="t in audioTracks" :key="t.id" :value="t.id">
             {{ t.title || t.lang || `audio ${t.id}` }}{{ t.default ? " (default)" : "" }}
           </option>
@@ -320,7 +371,7 @@ function fmt(t) {
           class="max-w-[160px] rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
           @change="selectSubtitle($event.target.value); $event.target.value = ''"
         >
-          <option value="">subtitles…</option>
+          <option value="" disabled selected>subtitles…</option>
           <option value="off">off</option>
           <option v-for="t in subtitleTracks" :key="t.id" :value="t.id">
             {{ t.title || t.lang || `sub ${t.id}` }}{{ t.external ? " (external)" : "" }}

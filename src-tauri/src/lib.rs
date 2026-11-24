@@ -3,6 +3,7 @@ mod commands;
 mod engine;
 mod events;
 pub mod streaming;
+pub mod storage;
 
 use tauri::Manager;
 
@@ -32,6 +33,9 @@ pub fn run() {
             app.manage(catalog::CatalogState {
                 provider: Box::new(catalog::provider::BundledProvider::new()),
             });
+            let data_dir = app.path().app_data_dir()?;
+            let db = storage::Db::open(data_dir.join("streamnest.db")).map_err(|e| e.to_string())?;
+            app.manage(db);
             tauri::async_runtime::spawn(engine::init(handle));
             Ok(())
         })
@@ -40,6 +44,18 @@ pub fn run() {
             dev_log,
             catalog::catalog_list,
             catalog::catalog_get,
+            storage::commands::db_upsert_torrent,
+            storage::commands::history_upsert,
+            storage::commands::history_list,
+            storage::commands::history_remove,
+            storage::commands::library_add,
+            storage::commands::library_list,
+            storage::commands::library_remove,
+            storage::commands::favorites_add,
+            storage::commands::favorites_list,
+            storage::commands::favorites_remove,
+            storage::commands::settings_set,
+            storage::commands::settings_get_all,
             commands::engine_status,
             commands::torrent_add_uri,
             commands::torrent_add_file_base64,

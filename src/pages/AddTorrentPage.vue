@@ -58,6 +58,14 @@ async function submit() {
       return;
     }
     addedTorrent.value = res;
+    const hash = res?.details?.info_hash;
+    if (hash) {
+      invoke("db_upsert_torrent", {
+        infoHash: hash,
+        name: res?.details?.name ?? "unknown",
+        outputFolder: res?.output_folder ?? null,
+      }).catch(() => {});
+    }
   } catch (err) {
     error.value = String(err?.message ?? err);
   } finally {
