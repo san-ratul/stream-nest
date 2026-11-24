@@ -193,7 +193,39 @@ CREATE TABLE IF NOT EXISTS sync_logs (
 );
 ";
 
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+/// Phase 2C schema: user-managed torrent sources (manual magnet/URL/file/page input).
+/// Kept separate from playback history and torrent runtime state.
+/// Reverse (documented, not executed): DROP TABLE media_sources.
+const SCHEMA_V3: &str = "
+CREATE TABLE IF NOT EXISTS media_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  info_hash TEXT UNIQUE,
+  source_type TEXT NOT NULL CHECK (source_type IN ('magnet', 'torrent_url', 'torrent_file', 'provider_page', 'official')),
+  display_name TEXT NOT NULL,
+  magnet_uri TEXT,
+  torrent_url TEXT,
+  torrent_file_path TEXT,
+  provider_key TEXT,
+  tmdb_media_type TEXT CHECK (tmdb_media_type IN ('movie', 'tv')),
+  tmdb_id INTEGER,
+  season_number INTEGER,
+  episode_number INTEGER,
+  file_index INTEGER,
+  total_size INTEGER,
+  trackers INTEGER,
+  metadata_json TEXT,
+  date_added TEXT NOT NULL DEFAULT (datetime('now')),
+  last_used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sources_tmdb
+  ON media_sources(tmdb_media_type, tmdb_id, season_number, episode_number);
+CREATE INDEX IF NOT EXISTS idx_sources_last_used ON media_sources(last_used_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sources_date ON media_sources(date_added DESC);
+";
+
+const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 impl Db {
     pub fn open(path: PathBuf) -> anyhow::Result<Self> {
@@ -223,6 +255,9 @@ impl Db {
             .unwrap_or(0);
         if version < 2 {
             conn.execute_batch(SCHEMA_V2)?;
+        }
+        if version < 3 {
+            conn.execute_batch(SCHEMA_V3)?;
         }
         conn.execute(
             "INSERT INTO schema_version(version)

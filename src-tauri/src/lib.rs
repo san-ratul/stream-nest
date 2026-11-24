@@ -2,8 +2,10 @@ pub mod catalog;
 mod commands;
 mod engine;
 mod events;
+mod fetch;
 pub mod metadata;
 pub mod playback;
+pub mod source_library;
 pub mod streaming;
 pub mod storage;
 
@@ -76,6 +78,11 @@ pub fn run() {
             // auto-stopped by playback).
             app.manage(playback::PlaybackRegistry::default());
 
+            // Source library (persisted copies under {app data}/sources).
+            app.manage(source_library::SourceLibraryState {
+                base_dir: data_dir.join("sources"),
+            });
+
             // Local image proxy (127.0.0.1, token path, bounded cache).
             let handle_for_images = handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -121,6 +128,17 @@ pub fn run() {
             playback::playback_begin,
             playback::playback_end,
             playback::playback_active,
+            source_library::source_add_magnet,
+            source_library::source_add_torrent_url,
+            source_library::source_add_file_base64,
+            source_library::source_resolve_page,
+            source_library::source_list,
+            source_library::source_get,
+            source_library::source_for_tmdb,
+            source_library::source_remove,
+            source_library::source_associate,
+            source_library::source_touch,
+            source_library::source_check_engine,
             storage::commands::db_upsert_torrent,
             storage::commands::history_upsert,
             storage::commands::history_list,

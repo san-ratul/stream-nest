@@ -279,7 +279,7 @@ fn schema_version_recorded_once() {
     let db = Db::open_in_memory().unwrap();
     {
         let conn = db.0.lock();
-        conn.execute("INSERT INTO schema_version(version) SELECT 2 WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE version >= 2)", []).unwrap();
+        conn.execute("INSERT INTO schema_version(version) SELECT 3 WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE version >= 3)", []).unwrap();
     }
     // Reopen: migration must be idempotent and not add duplicate version rows.
     let db2 = Db::open_in_memory().unwrap();
@@ -290,7 +290,7 @@ fn schema_version_recorded_once() {
         })
         .unwrap();
     assert_eq!(count, 1, "version row must not duplicate on re-open");
-    assert_eq!(maxv, 2);
+    assert_eq!(maxv, 3);
 }
 
 #[test]
