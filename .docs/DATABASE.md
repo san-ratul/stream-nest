@@ -1,24 +1,31 @@
 # Database
 
-Status: schema design scheduled for Phase 10 (implementation Phase 6+). Engine piece state never stored here.
+Status: Phase 10 COMPLETE — rusqlite (bundled SQLite, no system dependency) with versioned schema at `src-tauri/src/storage/mod.rs`.
 
-## Planned entities (PRD §6.4)
+## Implemented entities (v1)
 
 | Table | Purpose |
 |---|---|
-| torrents | Torrent sessions (info-hash, name, state, destination, added_at) |
-| torrent_files | Per-file metadata (index, path, size, video flag, selection) |
-| playback_history | Positions, duration, timestamps, media ref |
-| library_items | Local media library entries |
-| favorites | User favorites |
-| app_settings | Key/value settings |
-| catalog_cache | Cached catalog metadata (source, fetched_at, payload) |
+| torrents | info_hash (unique), name, state, output_folder, added_at |
+| torrent_files | per-torrent file index/path/size/video/selection (FK cascade) |
+| playback_history | media_key UNIQUE upsert, position/duration, last_played_at (indexed) |
+| library_items | media_key unique, title, media_type, added_at |
+| favorites | media_key unique, title, created_at |
+| app_settings | key/value store (Settings UI persists here) |
+| catalog_cache | source payload cache (reserved for remote providers) |
+| schema_version | migration anchor (v1) |
+
+Media key convention: `{info_hash}:{file_index}` for torrent video; `file:{path}` for local media.
 
 ## Engine state boundary
 
-- Piece bitfields/availability: owned by librqbit (in-memory + its own fastresume files).
-- StreamNest persists only session references + user-facing state needed for recovery and library features.
+- Piece bitfields/availability: owned by librqbit (in-memory + its own JSON fastresume under `engine/session/`). Confirmed live: app restart restored torrents with partial downloads (93% Sintel resume observed).
 
-## Technology choice
+## Technology decision
 
-rusqlite vs sqlx-sqlite: decided at Phase 10 kickoff with a verification spike (async needs are minimal; likely rusqlite + a mutex/queue). Migration mechanism: schema_version table + ordered migrations.
+rusqlite + parking_lot mutex — embedded, synchronous access from Tauri commands, zero external services. WAL + foreign_keys ON at open. In-memory mode used by tests.
+
+## Tests
+
+`tests/storage_test.rs`: history upsert dedupe, favorites unique toggle, settings roundtrip, torrent upsert idempotency (4 tests).
+
