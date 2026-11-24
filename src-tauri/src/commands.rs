@@ -19,6 +19,7 @@ use serde::Serialize;
 use tauri::State;
 
 use crate::engine::{EngineShared, EngineState};
+use crate::storage::Db;
 
 fn parse_peers(peers: Option<Vec<String>>) -> Result<Option<Vec<std::net::SocketAddr>>, String> {
     let Some(peers) = peers else {
@@ -32,6 +33,109 @@ fn parse_peers(peers: Option<Vec<String>>) -> Result<Option<Vec<std::net::Socket
         out.push(addr);
     }
     Ok(if out.is_empty() { None } else { Some(out) })
+}
+
+#[derive(Serialize)]
+pub struct StorageUsage {
+    pub path: String,
+    pub bytes: u64,
+    pub files: u64,
+}
+
+fn dir_usage(path: &std::path::Path) -> (u64, u64) {
+    let mut bytes = 0u64;
+    let mut files = 0u64;
+    if let Ok(entries) = walkdir(path) {
+        for (size, _modified) in entries {
+            bytes += size;
+            files += 1;
+        }
+    }
+    (bytes, files)
+}
+
+fn walkdir(path: &std::path::Path) -> std::io::Result<Vec<(u64, std::time::SystemTime)>> {
+    let mut out = Vec::new();
+    if path.is_file() {
+        let meta = std::fs::metadata(path)?;
+        out.push((meta.len(), meta.modified().unwrap_or(std::time::UNIX_EPOCH)));
+        return Ok(out);
+    }
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                out.extend(walkdir(&p)?);
+            } else if let Ok(meta) = std::fs::metadata(&p) {
+                out.push((meta.len(), meta.modified().unwrap_or(std::time::UNIX_EPOCH)));
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn storage_usage(state: State<'_, EngineState>) -> CommandResult<StorageUsage> {
+    let shared = shared(&state)?;
+    let (bytes, files) = dir_usage(&shared.download_dir);
+    Ok(StorageUsage {
+        path: shared.download_dir.to_string_lossy().to_string(),
+        bytes,
+        files,
+    })
+}
+
+#[tauri::command]
+pub fn clear_subtitles(state: State<'_, EngineState>) -> CommandResult<u64> {
+    let shared = shared(&state)?;
+    let dir = shared
+        .download_dir
+        .parent()
+        .map(|p| p.join("subtitles"))
+        .unwrap_or_else(|| std::path::PathBuf::from("subtitles"));
+    let mut removed = 0u64;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_file() && std::fs::remove_file(entry.path()).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    Ok(removed)
+}
+
+#[tauri::command]
+pub fn apply_engine_limits(
+    engine: State<'_, EngineState>,
+    db: State<'_, Db>,
+    download_limit_kbps: i64,
+    upload_limit_kbps: i64,
+) -> CommandResult<()> {
+    let shared = shared(&engine)?;
+    let session = shared.api.session();
+    let to_bps = |kbps: i64| {
+        if kbps > 0 {
+            Some(std::num::NonZeroU32::new((kbps * 1000) as u32).unwrap_or_else(|| std::num::NonZeroU32::new(1).unwrap()))
+        } else {
+            None
+        }
+    };
+    session.ratelimits.set_download_bps(to_bps(download_limit_kbps));
+    session.ratelimits.set_upload_bps(to_bps(upload_limit_kbps));
+    Ok(())
+}
+
+fn read_setting(db: &Db, key: &str, default: i64) -> i64 {
+    let conn = db.0.lock();
+    conn.query_row("SELECT value FROM app_settings WHERE key = ?1", [key], |r| {
+        let v: String = r.get(0)?;
+        Ok(v.parse::<i64>().unwrap_or(default))
+    })
+    .unwrap_or(default)
+}
+
+fn read_connection_limit(db: &Db) -> i64 {
+    read_setting(db, "connectionLimit", 100)
 }
 
 #[derive(Serialize)]

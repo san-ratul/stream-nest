@@ -71,6 +71,9 @@ pub fn run() {
             commands::session_stats,
             commands::stream_url,
             commands::import_subtitle,
+            commands::storage_usage,
+            commands::clear_subtitles,
+            commands::apply_engine_limits,
             #[cfg(debug_assertions)]
             commands::dev_read_test_torrent,
         ]);

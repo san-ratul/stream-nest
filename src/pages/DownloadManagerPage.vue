@@ -1,6 +1,7 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { invoke } from "@tauri-apps/api/core";
 import {
   torrentStore,
   torrentLive,
@@ -15,11 +16,39 @@ import {
 } from "../stores/torrents";
 import TorrentRow from "../components/common/TorrentRow.vue";
 import AppState from "../components/common/AppState.vue";
+import { settingsStore } from "../stores/settings";
 
 const router = useRouter();
 const busyId = ref(null);
 const error = ref(null);
+const usage = ref(null);
 const filter = ref("all"); // all | active | paused | complete
+
+async function refreshUsage() {
+  try {
+    usage.value = await invoke("storage_usage");
+  } catch {
+    usage.value = null;
+  }
+}
+
+const overLimit = computed(
+  () => usage.value && settingsStore.cacheSizeLimitMb > 0 && usage.value.bytes > settingsStore.cacheSizeLimitMb * 1024 * 1024
+);
+
+async function clearSubtitles() {
+  error.value = null;
+  try {
+    const n = await invoke("clear_subtitles");
+    usageNote.value = `Removed ${n} subtitle file(s).`;
+  } catch (err) {
+    error.value = String(err?.message ?? err);
+  }
+}
+
+const usageNote = ref(null);
+
+onMounted(refreshUsage);
 
 const filtered = computed(() =>
   torrentStore.torrents.filter((t) => {
@@ -82,6 +111,33 @@ async function act(id, fn) {
       <div class="rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-3">
         <div class="text-xs uppercase tracking-wide text-slate-400">Torrents</div>
         <div class="mt-1 text-lg font-semibold text-slate-200">{{ torrentStore.torrents.length }}</div>
+      </div>
+    </div>
+
+    <div class="mb-4 rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-3">
+      <div class="flex items-center justify-between">
+        <div class="text-sm">
+          <span class="font-medium text-slate-200">Storage</span>
+          <span class="ml-2 text-slate-400">
+            {{ usage ? `${fmtBytes(usage.bytes)} in ${usage.files} files` : "—" }}
+          </span>
+          <span v-if="usage" class="ml-2 text-xs text-slate-500">{{ usage.path }}</span>
+          <span
+            v-if="overLimit"
+            class="ml-2 rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300"
+          >
+            over cache limit ({{ settingsStore.cacheSizeLimitMb }} MB) — remove completed torrents to free space
+          </span>
+          <span v-if="usageNote" class="ml-2 text-xs text-emerald-300">{{ usageNote }}</span>
+        </div>
+        <div class="flex gap-2">
+          <button class="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700" @click="refreshUsage">
+            refresh
+          </button>
+          <button class="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-700" @click="clearSubtitles">
+            clear subtitles
+          </button>
+        </div>
       </div>
     </div>
 

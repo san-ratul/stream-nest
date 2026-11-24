@@ -63,6 +63,14 @@ async function persistAll() {
       console.warn(`settings save failed for ${key}`, err);
     }
   }
+  try {
+    await invoke("apply_engine_limits", {
+      downloadLimitKbps: settingsStore.downloadSpeedLimitKbps,
+      uploadLimitKbps: settingsStore.uploadSpeedLimitKbps,
+    });
+  } catch (err) {
+    console.warn("engine limit application failed (engine may not be ready yet)", err);
+  }
 }
 
 export function resetSettings() {
