@@ -6,4 +6,9 @@ src-tauri/gen/schemas/
 .DS_Store
 Thumbs.db
 
+# Local secrets / environment configuration (never commit)
+.env
+.env.*
+!.env.example
+
 .testmedia/
