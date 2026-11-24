@@ -48,6 +48,8 @@ let lastSaveSeconds = 0;
 let resumed = false;
 let resizeObserver = null;
 let marginsTimer = null;
+let loadStartedAt = null;
+let loadFailNoted = false;
 
 const appWindow = getCurrentWebviewWindow();
 
@@ -261,7 +263,10 @@ async function forceSoftwareDecode() {
 
 onMounted(async () => {
   await playerInit();
-  if (playerStore.src) await playerLoad(playerStore.src);
+  if (playerStore.src) {
+    loadStartedAt = Date.now();
+    await playerLoad(playerStore.src);
+  }
   await refreshTracks();
   await updateMargins();
   if (surfaceRef.value && typeof ResizeObserver !== "undefined") {
@@ -289,6 +294,14 @@ onMounted(async () => {
       // pause sync is best-effort
     }
     const diag = await playerRenderDiagnostics();
+    if (diag?.voConfigured === true && !playerStore.hasVideo) {
+      playerStore.hasVideo = true;
+      invoke("dev_log", { message: "hasVideo=true (vo configured)" }).catch(() => {});
+    }
+    if (!playerStore.hasVideo && !loadFailNoted && loadStartedAt && Date.now() - loadStartedAt > 8000) {
+      loadFailNoted = true;
+      controlError.value = "stream did not start — the source may be offline; reopen it from Downloads.";
+    }
     const src = sourceTorrent.value;
     const dl = src ? `${fmtBytes(src.stats?.downloaded_bytes ?? 0)}/${fmtBytes(src.stats?.total_bytes ?? 0)}` : "n/a";
     const m = diag?.margins ?? {};
@@ -374,6 +387,10 @@ function fmt(t) {
   </div>
 
   <div v-else ref="surfaceRef" class="relative flex h-full flex-col justify-end" data-player-surface>
+    <div
+      class="absolute inset-0 z-0 bg-[#0b0f17] transition-opacity duration-300"
+      :class="playerStore.hasVideo ? 'opacity-0' : 'opacity-100'"
+    ></div>
     <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-5 pb-8 pt-3">
       <div class="flex items-center gap-4 text-xs text-slate-200 drop-shadow">
         <span class="max-w-[40%] truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
