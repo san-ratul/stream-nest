@@ -4,6 +4,21 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — Final polish round (user-driven QA) and MVP sign-off
+
+- Unified player header row + auto-hiding chrome (3s idle → fade + cursor hide; returns on mouse move; always visible when paused/scrubbing/popovers open).
+- Audio selector rebuilt as glass popover with language-code chips (Windows cannot render flag emoji); all dropdowns auto-close on selection; Esc closes all.
+- Translucency rebalanced (85–90% surfaces), red translucent close button.
+- Critical: mpv wrapper segfault via node-format property read (0xc0000005, two crashes) → string format + defensive parse; graceful stop before destroy.
+- See-through window fix (stale stream URLs rebuilt from torrent identity; opaque fallback under player).
+- Video-under-sidebar root cause fixed (AppShell layering), sidebar replaced by floating menu + glass nav modal, video full-bleed.
+- Live user-verified: The Mentalist (H.264, hwdec d3d11va) and JoJo (65 tracks: 3 audio, 61 subs) rendering correctly with all controls functional.
+- Final verification: 22/22 Rust tests pass, frontend builds clean, installer + installed app verified, 30 commits.
+
+MVP status: DELIVERED. Live-swarm failure scenarios (no-seeders etc.) remain documented manual-test items; code signing and GitHub publishing await user decisions.
+
+---
+
 ## 2026-11-24 — Live UX debugging session with user (HEVC stream)
 
 Fixed in order of user reports:
