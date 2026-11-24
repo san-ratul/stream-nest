@@ -4,6 +4,27 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — M1 + M2 complete
+
+**M1 (librqbit engine):**
+- `src-tauri/src/engine.rs` — Session facade (JSON persistence + fastresume + DHT), EngineState managed via setup hook, async init, `engine:ready` / `engine:error` events.
+- `src-tauri/src/commands.rs` — 14 commands: engine_status, torrent_add_uri, torrent_add_file_base64, torrent_list, torrent_details, torrent_stats, torrent_peer_stats, torrent_pause/start/forget/delete, torrent_update_only_files, session_stats, stream_url.
+- `src-tauri/src/events.rs` — 1 Hz `engine:torrents` stats broadcaster.
+- Deps added: librqbit 9.1.0, base64, parking_lot 0.12, tokio, anyhow.
+
+**M2 (progressive streaming):**
+- `src-tauri/src/streaming.rs` — custom axum server: binds 127.0.0.1:0, random UUID token in path, Host allowlist (127.0.0.1/localhost only), byte-exact Range semantics (200/206/416), mime via engine, ReaderStream body.
+- `stream_url` command returns `http://127.0.0.1:{port}/{token}/{id}/{file_id}` for libmpv.
+
+**Tests executed:**
+- `cargo test --test engine_test` → 1 passed (session boots, JSON persistence, empty list).
+- `cargo test --test streaming_test` → 1 passed (token 404, foreign-Host 403, Range 206 exact Content-Range + byte-exact payload, open-ended range).
+- App run: `torrent engine initialized` in logs; window up (PID 7376) — PASSED.
+
+**Decision recorded:** no rqbit HttpApi server; custom streaming server only (TD-005).
+
+---
+
 ## 2026-11-24 — Environment & scaffold (M0)
 
 **Completed:**
