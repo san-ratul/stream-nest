@@ -29,6 +29,18 @@ Status legend: [ ] pending · [~] in progress · [x] complete · [!] blocked
 ## Phase 12 — Performance benchmarks vs targets — [x] MEASURED (see STREAMING_ENGINE.md)
 ## Phase 13 — Windows Release — [x] COMPLETE (installer built + verified; unsigned)
 
+## Phase 14 — Movie & TV Discovery (TMDB) — [x] IMPLEMENTED (branch feature/phase-2-movie-tv-discovery)
+
+- [x] TMDB client (official API, retries, rate-limit, timeouts, mockable; 61 tests green)
+- [x] Schema v2: movies, tv_shows, genres (+joins), tv_seasons, tv_episodes, catalog_collections(+items), sync_logs
+- [x] Sync engine: 11 collections, paginated, per-collection transactions, cancel + resume-safe, sync_logs
+- [x] Local image proxy (127.0.0.1 + token, bounded 512 MB cache), CSP img-src local-only relaxation
+- [x] Home discovery sections + Continue Watching preserved; Search (debounced, local-first, filters)
+- [x] Movie details (cast/crew, sources), TV details (seasons/episodes, watched badges)
+- [x] Authorized content-source provider trait + curated rights-verified entries (no fake playables)
+- [x] Settings sync panel: status, progress, cancel, scope (pages), clear catalog (personal data kept)
+- [ ] Future: in-app playback via additional rights-verified sources; remote TMDB search as opt-in
+
 ## Benchmark targets vs measured (reference: i7-14700K / 31.8 GB / Win 11 26300)
 
 - First frame: target ≤ ~15 s well-seeded → measured 276–374 ms (1.1 GB @ 3 MB/s throttle) — PASS

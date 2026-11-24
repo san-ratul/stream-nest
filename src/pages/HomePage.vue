@@ -3,10 +3,19 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { invoke } from "@tauri-apps/api/core";
 import { torrentStore, torrentLive } from "../stores/torrents";
-import { openInPlayer, mediaKey } from "../stores/player";
+import { openInPlayer } from "../stores/player";
 import { streamUrl } from "../stores/torrents";
 import TorrentRow from "../components/common/TorrentRow.vue";
 import AppState from "../components/common/AppState.vue";
+import MediaCard from "../components/common/MediaCard.vue";
+import {
+  catalogStore,
+  loadHomeSections,
+  loadCatalogStatus,
+  loadFavorites,
+  startSync,
+  isSyncRunning,
+} from "../stores/catalog";
 
 const router = useRouter();
 const history = ref([]);
@@ -25,10 +34,26 @@ async function loadHistory() {
   }
 }
 
-onMounted(loadHistory);
+onMounted(async () => {
+  loadHistory();
+  loadFavorites();
+  await loadCatalogStatus();
+  if (catalogStore.status?.db?.movies > 0 || catalogStore.status?.db?.tv_shows > 0) {
+    loadHomeSections();
+  }
+});
+
+function openCard(card) {
+  router.push(card.media_type === "tv" ? `/tv/${card.tmdb_id}` : `/movie/${card.tmdb_id}`);
+}
 
 async function resumeHistory(row) {
+  // Torrent media keys: "{info_hash}:{file_index}". TMDB keys route to details instead.
   const parts = row.media_key.split(":");
+  if (parts.length === 3 && parts[0] === "tmdb") {
+    router.push(parts[1] === "tv" ? `/tv/${parts[2]}` : `/movie/${parts[2]}`);
+    return;
+  }
   if (parts.length !== 2) return;
   const [hash, fileIdx] = parts;
   try {
@@ -59,6 +84,30 @@ function fmtClock(s) {
 
 const activeTorrents = computed(() => torrentStore.torrents.filter((t) => torrentLive(t)));
 const recentTorrents = computed(() => torrentStore.torrents.slice(0, 5));
+const orderedSections = computed(() =>
+  [...catalogStore.sections].sort((a, b) => a.sort_order - b.sort_order)
+);
+const catalogEmpty = computed(
+  () =>
+    !catalogStore.loadingSections &&
+    orderedSections.value.length === 0
+);
+
+async function triggerSync() {
+  try {
+    await startSync();
+    // Poll briefly so the button reflects state; full progress lives in Settings.
+    const poll = setInterval(async () => {
+      await loadCatalogStatus();
+      if (!isSyncRunning()) {
+        clearInterval(poll);
+        loadHomeSections();
+      }
+    }, 2000);
+  } catch (err) {
+    console.warn("sync start failed", err);
+  }
+}
 </script>
 
 <template>
@@ -66,14 +115,22 @@ const recentTorrents = computed(() => torrentStore.torrents.slice(0, 5));
     <header class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-slate-100">Home</h1>
-        <p class="mt-1 text-sm text-slate-400">Your media, your device, your control.</p>
+        <p class="mt-1 text-sm text-slate-400">Discover metadata. Stream what you legally can.</p>
       </div>
-      <button
-        class="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-sky-400"
-        @click="router.push('/add')"
-      >
-        + Add torrent
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="rounded-md border border-slate-600 bg-slate-800/60 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
+          @click="router.push('/search')"
+        >
+          ⌕ Search
+        </button>
+        <button
+          class="rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-sky-400"
+          @click="router.push('/add')"
+        >
+          + Add torrent
+        </button>
+      </div>
     </header>
 
     <AppState
@@ -83,7 +140,7 @@ const recentTorrents = computed(() => torrentStore.torrents.slice(0, 5));
       :message="torrentStore.engineError"
     />
 
-    <div v-else class="flex flex-1 flex-col gap-6 overflow-y-auto">
+    <div v-else class="flex flex-1 flex-col gap-6 overflow-y-auto pb-4">
       <section>
         <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Continue watching</h2>
         <div v-if="loadingHistory" class="rounded-lg border border-dashed border-slate-700 px-4 py-6 text-sm text-slate-400">
@@ -116,6 +173,52 @@ const recentTorrents = computed(() => torrentStore.torrents.slice(0, 5));
           Nothing in progress yet. Positions are saved automatically while you watch.
         </div>
       </section>
+
+      <div v-if="catalogStore.status && !catalogStore.status.has_api_key"
+        class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        Metadata discovery is inactive: no TMDB API key configured.
+        Add <code class="rounded bg-black/30 px-1">TMDB_API_KEY=...</code> to your <code class="rounded bg-black/30 px-1">.env</code> and restart,
+        then run a sync from Settings.
+      </div>
+      <div v-else-if="catalogStore.status && catalogStore.status.db.movies === 0 && catalogStore.status.db.tv_shows === 0 && !isSyncRunning()"
+        class="flex items-center justify-between rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
+        <span>The local catalog is empty. Synchronize with TMDB to populate discovery sections.</span>
+        <button class="rounded-md bg-sky-500/20 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/30" @click="triggerSync">
+          Sync now
+        </button>
+      </div>
+      <div v-else-if="isSyncRunning()"
+        class="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+        Catalog synchronization in progress: {{ catalogStore.status.phase.detail?.step || "working" }}…
+        Track it in Settings.
+      </div>
+
+      <AppState
+        v-if="catalogStore.sectionsError"
+        state="error"
+        title="Discovery sections failed to load"
+        :message="catalogStore.sectionsError"
+      />
+      <template v-else>
+        <section v-if="catalogStore.loadingSections" class="grid grid-cols-3 gap-4 lg:grid-cols-6">
+          <div v-for="i in 6" :key="i" class="animate-pulse">
+            <div class="aspect-[2/3] w-full rounded-lg bg-slate-800/60"></div>
+            <div class="mt-2 h-3 w-3/4 rounded bg-slate-800/60"></div>
+            <div class="mt-1 h-2 w-1/2 rounded bg-slate-800/40"></div>
+          </div>
+        </section>
+
+        <template v-else>
+          <section v-for="section in orderedSections" :key="section.key">
+            <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">{{ section.title }}</h2>
+            <div class="flex gap-3 overflow-x-auto pb-2">
+              <div class="w-[150px] shrink-0" v-for="card in section.items" :key="`${card.media_type}-${card.tmdb_id}`">
+                <MediaCard :card="card" @open="openCard" />
+              </div>
+            </div>
+          </section>
+        </template>
+      </template>
 
       <section>
         <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">

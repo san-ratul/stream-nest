@@ -16,12 +16,13 @@ let ranAutoStream = false;
 const nav = [
   { path: "/", label: "Home", key: "1" },
   { path: "/discover", label: "Discover", key: "2" },
-  { path: "/add", label: "Add Torrent", key: "3" },
-  { path: "/downloads", label: "Downloads", key: "4" },
-  { path: "/library", label: "Library", key: "5" },
-  { path: "/favorites", label: "Favorites", key: "6" },
-  { path: "/settings", label: "Settings", key: "7" },
-  { path: "/about", label: "About", key: "8" },
+  { path: "/search", label: "Search", key: "3" },
+  { path: "/add", label: "Add Torrent", key: "4" },
+  { path: "/downloads", label: "Downloads", key: "5" },
+  { path: "/library", label: "Library", key: "6" },
+  { path: "/favorites", label: "Favorites", key: "7" },
+  { path: "/settings", label: "Settings", key: "8" },
+  { path: "/about", label: "About", key: "9" },
 ];
 
 const activeCount = computed(() => torrentStore.torrents.filter((t) => torrentLive(t)).length);

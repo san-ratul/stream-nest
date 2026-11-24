@@ -427,7 +427,13 @@ impl TmdbClient {
     }
 
     fn build_url(&self, path: &str, params: &[(&str, String)]) -> String {
-        let mut url = format!("https://api.themoviedb.org/3/{path}?api_key={}", self.api_key);
+        // Some endpoints (discover) embed query params in their path; keep the
+        // separator valid in both cases.
+        let sep = if path.contains('?') { "&" } else { "?" };
+        let mut url = format!(
+            "https://api.themoviedb.org/3/{path}{sep}api_key={}",
+            self.api_key
+        );
         if let Some((_, lang)) = params.iter().find(|(k, _)| *k == "language") {
             url.push_str(&format!("&language={lang}"));
         }

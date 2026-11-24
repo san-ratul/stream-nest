@@ -314,6 +314,9 @@ async fn sync_collection(
         let collection_id = repo::upsert_collection(&tx, def.key, def.title, def.media_type, def.sort_order)?;
         let mut members: Vec<(&str, i64)> = Vec::with_capacity(items.len());
         for (item, _) in &items {
+            if members.iter().any(|(_, id)| *id == item.id) {
+                continue; // upstream lists can repeat an id across pages
+            }
             match def.media_type {
                 "movie" => {
                     let row_id = repo::upsert_movie_list_item(&tx, item)?;

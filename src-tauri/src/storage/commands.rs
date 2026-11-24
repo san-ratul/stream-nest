@@ -122,12 +122,16 @@ pub fn library_add(
     media_key: String,
     title: String,
     path: Option<String>,
+    media_type: Option<String>,
 ) -> DbResult<()> {
+    let media_type = media_type
+        .filter(|m| !m.is_empty())
+        .unwrap_or_else(|| "torrent_video".to_string());
     let conn = db.0.lock();
     conn.execute(
-        "INSERT INTO library_items(media_key, title, path) VALUES (?1, ?2, ?3)
-         ON CONFLICT(media_key) DO UPDATE SET title = excluded.title, path = excluded.path",
-        rusqlite::params![media_key, title, path],
+        "INSERT INTO library_items(media_key, title, media_type, path) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(media_key) DO UPDATE SET title = excluded.title, path = excluded.path, media_type = excluded.media_type",
+        rusqlite::params![media_key, title, media_type, path],
     )?;
     Ok(())
 }

@@ -1,8 +1,10 @@
 <script setup>
 import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { useRouter } from "vue-router";
 import AppState from "../components/common/AppState.vue";
 
+const router = useRouter();
 const library = ref([]);
 const history = ref([]);
 const loading = ref(true);
@@ -32,6 +34,19 @@ async function removeLibrary(mediaKey) {
 async function removeHistory(id) {
   await invoke("history_remove", { id });
   await load();
+}
+
+function tmdbRoute(mediaKey) {
+  const parts = mediaKey.split(":");
+  if (parts.length === 3 && parts[0] === "tmdb") {
+    return parts[1] === "tv" ? `/tv/${parts[2]}` : `/movie/${parts[2]}`;
+  }
+  return null;
+}
+
+function openRow(mediaKey) {
+  const target = tmdbRoute(mediaKey);
+  if (target) router.push(target);
 }
 
 function matches(title) {
@@ -88,6 +103,13 @@ function progressOf(row) {
             </span>
             <span class="w-36 shrink-0 text-right text-xs text-slate-500">{{ row.last_played_at }}</span>
             <button
+              v-if="tmdbRoute(row.media_key)"
+              class="shrink-0 rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/30"
+              @click="openRow(row.media_key)"
+            >
+              open
+            </button>
+            <button
               class="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-700"
               @click="removeHistory(row.id)"
             >
@@ -111,6 +133,13 @@ function progressOf(row) {
             <span class="min-w-0 flex-1 truncate text-slate-200">{{ row.title }}</span>
             <span class="rounded bg-slate-700/60 px-1.5 py-0.5 text-xs text-slate-300">{{ row.media_type }}</span>
             <span class="w-36 shrink-0 text-right text-xs text-slate-500">{{ row.added_at }}</span>
+            <button
+              v-if="tmdbRoute(row.media_key)"
+              class="shrink-0 rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/30"
+              @click="openRow(row.media_key)"
+            >
+              open
+            </button>
             <button
               class="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-700"
               @click="removeLibrary(row.media_key)"

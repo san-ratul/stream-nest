@@ -322,8 +322,10 @@ pub fn replace_collection_items(
         [collection_id],
     )?;
     for (position, (media_type, tmdb_id)) in items.iter().enumerate() {
+        // OR IGNORE: upstream list data can repeat an id across pages; keep the
+        // first occurrence (position ordering remains meaningful).
         conn.execute(
-            "INSERT INTO catalog_collection_items(collection_id, media_type, tmdb_id, position)
+            "INSERT OR IGNORE INTO catalog_collection_items(collection_id, media_type, tmdb_id, position)
              VALUES (?1, ?2, ?3, ?4)",
             params![collection_id, media_type, tmdb_id, position as i64],
         )?;
