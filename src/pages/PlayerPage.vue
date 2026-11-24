@@ -43,6 +43,7 @@ const scrubValue = ref(0);
 const surfaceRef = ref(null);
 const controlsRef = ref(null);
 const subsOpen = ref(false);
+const aspectOpen = ref(false);
 let probeTimer = null;
 let lastTime = null;
 let stallSeconds = 0;
@@ -180,6 +181,10 @@ function onKeydown(e) {
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
   if (e.key === "Escape" && subsOpen.value) {
     subsOpen.value = false;
+    return;
+  }
+  if (e.key === "Escape" && aspectOpen.value) {
+    aspectOpen.value = false;
     return;
   }
   switch (e.key) {
@@ -614,14 +619,29 @@ function fmt(t) {
           <option v-for="s in SPEEDS" :key="s" :value="s">{{ s }}×</option>
         </select>
 
-        <select
-          class="rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-400"
-          :value="aspect"
-          title="Aspect ratio"
-          @change="setAspect($event.target.value)"
-        >
-          <option v-for="a in ASPECTS" :key="a.value" :value="a.value">aspect: {{ a.label }}</option>
-        </select>
+        <div class="relative">
+          <button
+            class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/50 text-base text-slate-100 hover:bg-white/10"
+            title="Aspect ratio"
+            @click="aspectOpen = !aspectOpen"
+          >
+            ▭
+          </button>
+          <div
+            v-if="aspectOpen"
+            class="absolute bottom-full left-1/2 z-20 mb-2 w-36 -translate-x-1/2 overflow-hidden rounded-xl border border-white/10 bg-black/70 shadow-2xl shadow-black/60 backdrop-blur-xl"
+          >
+            <button
+              v-for="a in ASPECTS"
+              :key="a.value"
+              class="block w-full px-3 py-2 text-left text-xs transition"
+              :class="aspect === a.value ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
+              @click="setAspect(a.value); aspectOpen = false"
+            >
+              {{ a.label }}
+            </button>
+          </div>
+        </div>
 
         <div class="ml-auto flex items-center gap-2">
           <span class="text-xs text-slate-400">Vol</span>
