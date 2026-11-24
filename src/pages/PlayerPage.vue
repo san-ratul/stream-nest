@@ -532,9 +532,11 @@ function fmt(t) {
           <span class="text-xs text-slate-400">Vol</span>
           <input
             type="range"
-            class="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-white/20
+            class="h-4 w-24 cursor-pointer appearance-none bg-transparent
+                   [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/25
                    [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none
-                   [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                   [&::-webkit-slider-thumb]:-mt-[3px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white
+                   [&::-webkit-slider-thumb]:shadow"
             min="0"
             max="130"
             :value="volume"
