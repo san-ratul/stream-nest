@@ -4,6 +4,19 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — Phase 1 complete (application foundation)
+
+- vue-router@4 added (hash history); routes for all 10 PRD screens + `/dev` harness.
+- `src/layouts/AppShell.vue`: sidebar nav (Alt+1..8 shortcuts), engine health indicator, active-download badge.
+- Stores: `stores/torrents.js` (engine event subscription `engine:torrents`/`engine:ready`/`engine:error`, command wrappers, formatters), `stores/player.js` (current stream), `stores/settings.js` (PRD §3.7 fields; local persistence now, SQLite migration at Phase 8 — documented).
+- Components: `AppState.vue` (loading/error/empty), `TorrentRow.vue` (progress/speeds/state badges).
+- Pages: Home (dashboard: recent + active torrents, honest Phase 6 placeholder for continue-watching), Add Torrent (magnet validation + file import via base64 + advanced initial peers + engine-ready gating), Torrent Details (async metadata polling, file list with video detection, selection, stream action, pause/resume/delete/forget), Download Manager (totals, filters, per-torrent actions), Player (store-driven, honest empty state), Settings (full PRD §3.7 form), Discover/Library/Favorites (honest phase-pending states), About (policies + license table), Dev Harness (moved off the boot path — no auto-run in normal startup).
+- `npm run build` → 54 modules, clean. App boots on Windows; engine ready; session persistence restored both test torrents (Sintel resumed at 93% — live M5 evidence).
+
+**Note:** video-visibility full-shell screenshot pending user glance (focus-steal protection blocked background capture); production build + boot logs green.
+
+---
+
 ## 2026-11-24 — M4 complete (progressive streaming ACCEPTED, video rendering fixed)
 
 **M4 run:** Sintel.2010.1080p.mkv (1.1 GB, 888 s, MKV/H.264) via local throttled seeder (3 MB/s upload) → engine → Range server → libmpv. Full evidence in STREAMING_ENGINE.md.
