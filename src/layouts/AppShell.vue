@@ -1,10 +1,59 @@
 <script setup>
 import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { invoke } from "@tauri-apps/api/core";
 import { torrentStore, torrentLive } from "../stores/torrents";
+import { openInPlayer } from "../stores/player";
+import { playerState, playerSeek } from "../composables/usePlayer";
 
 const route = useRoute();
 const router = useRouter();
+
+const isDev = import.meta.env.DEV;
+let ranAutoStream = false;
+
+async function devAutoStream() {
+  if (ranAutoStream) return;
+  ranAutoStream = true;
+  try {
+    const list = await invoke("torrent_list");
+    const t = (list?.torrents ?? [])[0];
+    if (!t) {
+      ranAutoStream = false;
+      return;
+    }
+    const id = t.id ?? t.info_hash;
+    const url = await invoke("stream_url", { id, fileId: 0 });
+    openInPlayer({
+      src: url,
+      title: t.name ?? "auto-test",
+      torrentId: id,
+      fileId: 0,
+      infoHash: t.info_hash ?? null,
+    });
+    invoke("dev_log", { message: `E2E auto-stream started id=${id}` }).catch(() => {});
+    router.push("/player");
+    setTimeout(async () => {
+      if (playerState.duration > 320) {
+        invoke("dev_log", { message: "E2E auto-seek to 300s" }).catch(() => {});
+        await playerSeek(300);
+      }
+    }, 5000);
+  } catch (err) {
+    invoke("dev_log", { message: `E2E auto-stream error ${err}` }).catch(() => {});
+  }
+}
+
+onMounted(() => {
+  if (isDev) {
+    const stop = setInterval(() => {
+      if (torrentStore.engineReady && !ranAutoStream) {
+        clearInterval(stop);
+        setTimeout(devAutoStream, 1200);
+      }
+    }, 1000);
+  }
+});
 
 const nav = [
   { path: "/", label: "Home", key: "1" },
@@ -66,7 +115,10 @@ onUnmounted(() => window.removeEventListener("keydown", onKeydown));
         </div>
       </div>
     </aside>
-    <main class="relative min-w-0 flex-1 bg-[#0b0f17]">
+    <main
+      class="relative min-w-0 flex-1"
+      :class="route.path === '/player' ? 'bg-transparent' : 'bg-[#0b0f17]'"
+    >
       <RouterView />
     </main>
   </div>

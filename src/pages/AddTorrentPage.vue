@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
+import { invoke } from "@tauri-apps/api/core";
 import { addTorrentFileBase64, addTorrentUri, torrentStore } from "../stores/torrents";
 
 const router = useRouter();

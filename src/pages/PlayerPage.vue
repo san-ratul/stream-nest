@@ -10,6 +10,7 @@ import {
   playerSeek,
   playerSetVolume,
   playerGetHwdec,
+  playerRenderDiagnostics,
   playerGetTrackList,
   playerSetAudioTrack,
   playerSetSubtitleTrack,
@@ -17,10 +18,12 @@ import {
   playerSetAspect,
   playerSetMute,
   playerAddExternalSubtitle,
+  playerSetProperty,
+  playerReinit,
 } from "../composables/usePlayer";
 import { invoke } from "@tauri-apps/api/core";
 import { playerStore, mediaKey } from "../stores/player";
-import { torrentStore, fmtSpeed } from "../stores/torrents";
+import { torrentStore, fmtSpeed, fmtBytes } from "../stores/torrents";
 import AppState from "../components/common/AppState.vue";
 
 const volume = ref(100);
@@ -32,6 +35,7 @@ const tracks = ref([]);
 const subtitleFile = ref(null);
 const controlError = ref(null);
 const resumeNote = ref(null);
+const fixApplied = ref(null);
 let probeTimer = null;
 let lastTime = null;
 let stallSeconds = 0;
@@ -148,6 +152,36 @@ async function refreshTracks() {
   tracks.value = await playerGetTrackList();
 }
 
+async function seekWhenReady(pos) {
+  for (let i = 0; i < 24; i++) {
+    if (playerState.duration != null) {
+      try {
+        await playerSeek(pos);
+        return;
+      } catch {
+        // property not ready yet; retry
+      }
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+async function forceSoftwareDecode() {
+  try {
+    await invoke("dev_log", { message: "FIX v2: reinit hwdec=no d3d11-output-format=bgra8 + reload" });
+    fixApplied.value = "re-initializing with 8-bit output…";
+    const pos = playerState.timePos ?? 0;
+    await playerReinit();
+    if (playerStore.src) {
+      await playerLoad(playerStore.src);
+      if (pos > 2) await seekWhenReady(pos);
+    }
+    setTimeout(() => (fixApplied.value = null), 4000);
+  } catch (err) {
+    controlError.value = String(err?.message ?? err);
+  }
+}
+
 async function onSubtitleFile() {
   controlError.value = null;
   const file = subtitleFile.value?.files?.[0];
@@ -183,6 +217,12 @@ onMounted(async () => {
   probeTimer = setInterval(async () => {
     playerGetHwdec();
     refreshTracks();
+    const diag = await playerRenderDiagnostics();
+    const src = sourceTorrent.value;
+    const dl = src ? `${fmtBytes(src.stats?.downloaded_bytes ?? 0)}/${fmtBytes(src.stats?.total_bytes ?? 0)}` : "n/a";
+    invoke("dev_log", {
+      message: `DIAG vo=${diag?.currentVo} configured=${diag?.voConfigured} frames=${diag?.videoFrames} dispRate=${diag?.displayRate} hwdecFailed=${diag?.hwdecFailed} download=${dl}`,
+    }).catch(() => {});
     const t = playerState.timePos;
     if (!playerState.paused && playerState.duration != null) {
       if (t != null && lastTime != null && Math.abs(t - lastTime) > 0.01) {
@@ -285,6 +325,14 @@ function fmt(t) {
     </div>
 
     <div class="absolute top-3 right-4 z-10 flex gap-2">
+      <button
+        v-if="playerState.buffering || playerState.videoFormat"
+        class="rounded bg-amber-500/80 px-3 py-1 text-xs font-medium text-slate-950 hover:bg-amber-400"
+        title="If video stays black, switch to software decoding"
+        @click="forceSoftwareDecode"
+      >
+        fix video (software decode)
+      </button>
       <button
         class="rounded bg-slate-800/90 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
         @click="toggleFullscreen"

@@ -4,6 +4,18 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — Post-MVP live testing with user (real-swarm HEVC episode)
+
+- User streamed a real 580 MB HEVC/x265 MKV via magnet. Pipeline worked end-to-end (metadata, file detection, stream URL, timeline advancing, buffering) — but video was black. Found and fixed TWO layering regressions:
+  1. AppShell `<main>` opaque background covered the mpv layer (Phase 1 regression; player route now `bg-transparent`).
+  2. Confirmed by pixel-variance screenshots: avgLum 11.1, stddev 14.1, 25.1% non-black after fix vs ~0% before; visual screenshot shows the episode rendering in-app.
+- Verification tooling added: `playerRenderDiagnostics` (vo/current/frames/display-rate), `estimated-vf-fps` observation, `playerReinit` (destroy+re-init with overrides), `forceSoftwareDecode` fix button (hwdec=no + bgra8 swapchain), session-persistent player state (survives reloads), auto-resume seek hardened with readiness retry, dev auto-stream harness (auto-opens persisted torrent on boot).
+- Real-bug found by user's screenshot: "invoke is not defined" on AddTorrent success path → missing import, fixed.
+- File-integrity probe of the completed torrent (direct disk read): valid EBML magic, HEVC + EAC3 CodecIDs, 96% non-zero entropy — content genuine; hash-verified by engine.
+- Release installer rebuilt with all fixes; silent reinstall updates the installed app.
+
+---
+
 ## 2026-11-24 — Phases 7–9, 13 complete; MVP milestone chain closed
 
 **Phase 7 (download manager/cache):** `storage_usage` command (recursive dir walk), storage card with bytes/files/path, subtitle cleanup command, cache-limit over-usage warning.

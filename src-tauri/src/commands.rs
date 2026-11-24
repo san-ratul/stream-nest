@@ -194,6 +194,7 @@ pub fn engine_status(state: State<'_, EngineState>) -> EngineStatus {
 #[tauri::command]
 pub async fn torrent_add_uri(
     state: State<'_, EngineState>,
+    db: State<'_, Db>,
     uri: String,
     peers: Option<Vec<String>>,
 ) -> CommandResult<ApiAddTorrentResponse> {
@@ -202,6 +203,7 @@ pub async fn torrent_add_uri(
     let opts = AddTorrentOptions {
         overwrite: false,
         initial_peers,
+        peer_limit: Some(read_connection_limit(&db) as usize),
         ..Default::default()
     };
     let shared = shared(&state)?;
@@ -214,6 +216,7 @@ pub async fn torrent_add_uri(
 #[tauri::command]
 pub async fn torrent_add_file_base64(
     state: State<'_, EngineState>,
+    db: State<'_, Db>,
     contents: String,
     peers: Option<Vec<String>>,
 ) -> CommandResult<ApiAddTorrentResponse> {
@@ -225,6 +228,7 @@ pub async fn torrent_add_file_base64(
     let opts = AddTorrentOptions {
         overwrite: false,
         initial_peers,
+        peer_limit: Some(read_connection_limit(&db) as usize),
         ..Default::default()
     };
     let shared = shared(&state)?;

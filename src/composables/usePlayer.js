@@ -17,6 +17,7 @@ const OBSERVED = [
   ["hwdec-current", "string", "none"],
   ["video-format", "string", "none"],
   ["eof-reached", "flag", "none"],
+  ["estimated-vf-fps", "double", "none"],
 ];
 
 export const playerState = reactive({
@@ -36,6 +37,7 @@ export const playerState = reactive({
   speed: 1,
   muted: false,
   aspect: "auto",
+  vfFps: null,
 });
 
 let unlisten = null;
@@ -72,18 +74,20 @@ function onTimePos(v) {
   }
 }
 
-export async function playerInit() {
+export async function playerInit(options) {
   if (playerState.initialized) return;
+  const cfg = options ?? {
+    initialOptions: {
+      vo: "gpu",
+      hwdec: "auto-safe",
+      "keep-open": "yes",
+      "force-window": "yes",
+      "d3d11-output-format": "bgra8",
+    },
+    observedProperties: OBSERVED,
+  };
   try {
-    await init({
-      initialOptions: {
-        vo: "gpu",
-        hwdec: "auto-safe",
-        "keep-open": "yes",
-        "force-window": "yes",
-      },
-      observedProperties: OBSERVED,
-    });
+    await init(cfg);
     playerState.initialized = true;
     await log("mpv initialized");
 
@@ -110,6 +114,9 @@ export async function playerInit() {
         case "eof-reached":
           playerState.eof = data;
           break;
+        case "estimated-vf-fps":
+          playerState.vfFps = data;
+          break;
       }
     });
   } catch (err) {
@@ -131,6 +138,21 @@ export async function playerDestroy() {
     }
     playerState.initialized = false;
   }
+}
+
+export async function playerReinit(overrides) {
+  await playerDestroy();
+  await playerInit({
+    initialOptions: {
+      vo: "gpu",
+      hwdec: "no",
+      "keep-open": "yes",
+      "force-window": "yes",
+      "d3d11-output-format": "bgra8",
+      ...(overrides ?? {}),
+    },
+    observedProperties: OBSERVED,
+  });
 }
 
 export async function playerLoad(src) {
@@ -167,6 +189,22 @@ export async function playerGetHwdec() {
     const v = await getProperty("hwdec-current", "string");
     playerState.hwdec = v;
     return v;
+  } catch {
+    return null;
+  }
+}
+
+export async function playerRenderDiagnostics() {
+  try {
+    const [voConfigured, currentVo, videoFrames, displayRate, hwdecFailed, videoDetected] = await Promise.all([
+      getProperty("vo-configured", "flag").catch(() => null),
+      getProperty("current-vo", "string").catch(() => null),
+      getProperty("video-out-frames", "int64").catch(() => null),
+      getProperty("estimated-display-frame-rate", "double").catch(() => null),
+      getProperty("hwdec-failed", "flag").catch(() => null),
+      getProperty("video-detected", "flag").catch(() => null),
+    ]);
+    return { voConfigured, currentVo, videoFrames, displayRate, hwdecFailed, videoDetected };
   } catch {
     return null;
   }
@@ -210,4 +248,8 @@ export async function playerAddExternalSubtitle(path, title) {
 
 export async function playerMpvCommand(name, args) {
   await command(name, args);
+}
+
+export async function playerSetProperty(name, value) {
+  await setProperty(name, value);
 }
