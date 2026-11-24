@@ -13,6 +13,7 @@ const OBSERVED = [
   ["pause", "flag"],
   ["time-pos", "double", "none"],
   ["duration", "double", "none"],
+  ["demuxer-cache-time", "double", "none"],
   ["hwdec-current", "string", "none"],
   ["video-format", "string", "none"],
   ["eof-reached", "flag", "none"],
@@ -24,12 +25,14 @@ export const playerState = reactive({
   paused: true,
   timePos: null,
   duration: null,
+  cacheTime: null,
   hwdec: null,
   videoFormat: null,
   eof: null,
   loadedSrc: null,
   firstFrameMs: null,
   lastSeekMs: null,
+  buffering: false,
 });
 
 let unlisten = null;
@@ -91,6 +94,9 @@ export async function playerInit() {
           break;
         case "duration":
           playerState.duration = data;
+          break;
+        case "demuxer-cache-time":
+          playerState.cacheTime = data;
           break;
         case "hwdec-current":
           playerState.hwdec = data;

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import {
   playerState,
   playerInit,
@@ -12,10 +12,21 @@ import {
 } from "../composables/usePlayer";
 import { invoke } from "@tauri-apps/api/core";
 import { playerStore } from "../stores/player";
+import { torrentStore, fmtSpeed } from "../stores/torrents";
 import AppState from "../components/common/AppState.vue";
 
 const volume = ref(100);
 let probeTimer = null;
+let lastTime = null;
+let stallSeconds = 0;
+
+const sourceTorrent = computed(
+  () =>
+    torrentStore.torrents.find(
+      (t) => String(t.id) === String(playerStore.torrentId) || t.info_hash === playerStore.torrentId
+    ) ?? null
+);
+const downloadSpeed = computed(() => sourceTorrent.value?.stats?.live?.downloaded ?? 0);
 
 onMounted(() => {
   playerInit().then(() => {
@@ -23,8 +34,22 @@ onMounted(() => {
   });
   probeTimer = setInterval(() => {
     playerGetHwdec();
+    const t = playerState.timePos;
+    if (!playerState.paused && playerState.duration != null) {
+      if (t != null && lastTime != null && Math.abs(t - lastTime) > 0.01) {
+        stallSeconds = 0;
+        playerState.buffering = false;
+      } else {
+        stallSeconds += 1;
+        playerState.buffering = stallSeconds >= 2;
+      }
+    } else {
+      stallSeconds = 0;
+      playerState.buffering = false;
+    }
+    lastTime = t;
     invoke("dev_log", {
-      message: `probe time=${playerState.timePos} dur=${playerState.duration} hwdec=${playerState.hwdec}`,
+      message: `probe time=${t} cache=${playerState.cacheTime} hwdec=${playerState.hwdec} buffering=${playerState.buffering}`,
     }).catch(() => {});
   }, 1000);
 });
@@ -72,6 +97,16 @@ function fmt(t) {
       <span class="max-w-[360px] truncate font-medium text-slate-100">{{ playerStore.title ?? "" }}</span>
       <span>hwdec: {{ playerState.hwdec ?? "?" }}</span>
       <span>codec: {{ playerState.videoFormat ?? "?" }}</span>
+      <span v-if="playerState.buffering" class="animate-pulse rounded bg-amber-500/20 px-2 py-0.5 text-amber-300">
+        buffering…
+        <span v-if="downloadSpeed"> ({{ fmtSpeed(downloadSpeed) }})</span>
+      </span>
+      <span
+        v-else-if="playerState.cacheTime != null && playerState.timePos != null && playerState.cacheTime > playerState.timePos + 2"
+        class="text-slate-400"
+      >
+        buffered to {{ fmt(playerState.cacheTime) }}
+      </span>
       <span v-if="playerState.error" class="text-red-400">{{ playerState.error }}</span>
     </div>
 
