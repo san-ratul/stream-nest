@@ -3,6 +3,7 @@ mod commands;
 mod engine;
 mod events;
 pub mod metadata;
+pub mod playback;
 pub mod streaming;
 pub mod storage;
 
@@ -71,6 +72,10 @@ pub fn run() {
             };
             app.manage(tmdb_state);
 
+            // Playback sessions registry (ownership tracking; torrents are never
+            // auto-stopped by playback).
+            app.manage(playback::PlaybackRegistry::default());
+
             // Local image proxy (127.0.0.1, token path, bounded cache).
             let handle_for_images = handle.clone();
             tauri::async_runtime::spawn(async move {
@@ -109,6 +114,13 @@ pub fn run() {
             metadata::catalog_sync_cancel,
             metadata::catalog_clear,
             metadata::catalog_set_pages,
+            metadata::catalog_card_lookup,
+            playback::playback_prepare_uri,
+            playback::playback_prepare_file,
+            playback::episode_matches,
+            playback::playback_begin,
+            playback::playback_end,
+            playback::playback_active,
             storage::commands::db_upsert_torrent,
             storage::commands::history_upsert,
             storage::commands::history_list,

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useRoute, useRouter } from "vue-router";
 import AppState from "../components/common/AppState.vue";
+import SourcePanel from "../components/streaming/SourcePanel.vue";
 import {
   imageUrl,
   SIZES,
@@ -13,6 +14,11 @@ import {
   toggleLibrary,
   isInLibrary,
 } from "../stores/catalog";
+import {
+  playbackStore,
+  startAuthorizedPlayback,
+  listenPlaybackStages,
+} from "../composables/playback";
 
 const route = useRoute();
 const router = useRouter();
@@ -20,7 +26,7 @@ const movieId = Number(route.params.id);
 
 const detail = ref(null);
 const sources = ref([]);
-const state = ref("loading"); // loading | ready | error | notfound
+const state = ref("loading");
 const error = ref(null);
 const posterUrl = ref(null);
 const backdropUrl = ref(null);
@@ -28,7 +34,41 @@ const profileUrls = ref({});
 const inLibrary = ref(false);
 const historyRow = ref(null);
 
+// Playback flow state
+const busySource = ref(null);
+const playbackError = ref(null);
+const chooserVideos = ref(null);
+let chooserResolve = null;
+
 const mediaKey = tmdbMediaKey("movie", movieId);
+
+function fileChooser(videos) {
+  return new Promise((resolve) => {
+    chooserVideos.value = videos;
+    chooserResolve = resolve;
+  });
+}
+
+async function onPlay(source) {
+  busySource.value = source.provider_id;
+  playbackError.value = null;
+  try {
+    const result = await startAuthorizedPlayback({
+      source,
+      tmdbKey: mediaKey,
+      title: detail.value.card.title,
+      onNeedFileChoice: fileChooser,
+    });
+    if (result?.started) {
+      router.push("/player");
+    }
+  } catch (err) {
+    playbackError.value = String(err?.message ?? err);
+  } finally {
+    busySource.value = null;
+    playbackStore.stage = null;
+  }
+}
 
 async function load() {
   state.value = "loading";
@@ -70,7 +110,10 @@ async function load() {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  listenPlaybackStages();
+});
 
 const playableSources = computed(() => sources.value.filter((s) => s.playable_in_app));
 const pageSources = computed(() => sources.value.filter((s) => !s.playable_in_app));
@@ -96,6 +139,30 @@ function fmtClock(s) {
   const m = Math.floor(s / 60);
   const ss = Math.floor(s % 60);
   return `${m}:${String(ss).padStart(2, "0")}`;
+}
+
+function fmtSize(n) {
+  if (!n) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = n;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u += 1;
+  }
+  return `${v.toFixed(v >= 10 || u === 0 ? 0 : 1)} ${units[u]}`;
+}
+
+function resolveChooser(fileIndex) {
+  chooserVideos.value = null;
+  chooserResolve?.(fileIndex);
+  chooserResolve = null;
+}
+
+function cancelChooser() {
+  chooserVideos.value = null;
+  chooserResolve?.(null);
+  chooserResolve = null;
 }
 </script>
 
@@ -201,13 +268,16 @@ function fmtClock(s) {
               </div>
 
               <div v-if="playableSources.length" class="mt-5">
-                <button
-                  v-for="s in playableSources"
-                  :key="s.provider_id"
-                  class="rounded-md bg-emerald-500/90 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
-                >
-                  ▶ Play ({{ s.source_name }})
-                </button>
+                <div v-if="playbackError" class="mb-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {{ playbackError }}
+                  <button class="ml-2 underline hover:text-red-200" @click="playbackError = null">dismiss</button>
+                </div>
+                <SourcePanel
+                  :sources="sources"
+                  :busy-source="busySource"
+                  :stage="playbackStore.stage"
+                  @play="onPlay"
+                />
               </div>
               <div v-else class="mt-5 max-w-2xl rounded-lg border border-slate-700/60 bg-slate-800/40 p-4">
                 <div class="text-sm font-semibold text-slate-200">No authorized in-app source</div>
@@ -283,5 +353,35 @@ function fmtClock(s) {
         </div>
       </div>
     </template>
+
+    <!-- Ambiguous video file chooser: never silently guess -->
+    <div
+      v-if="chooserVideos"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      @click.self="cancelChooser"
+    >
+      <div class="w-full max-w-xl rounded-lg border border-slate-700 bg-slate-900 p-4">
+        <h3 class="text-lg font-semibold text-slate-100">Select a video file</h3>
+        <p class="mt-1 text-xs text-slate-400">
+          This source contains multiple video files. Choose the one to stream.
+        </p>
+        <div class="mt-3 flex max-h-80 flex-col gap-1 overflow-y-auto">
+          <button
+            v-for="v in chooserVideos"
+            :key="v.file_index"
+            class="flex items-center justify-between rounded border border-slate-700/60 px-3 py-2 text-left text-sm text-slate-200 hover:border-sky-500/50 hover:bg-slate-800"
+            @click="resolveChooser(v.file_index)"
+          >
+            <span class="min-w-0 truncate">{{ v.path }}</span>
+            <span class="shrink-0 text-xs text-slate-500">{{ fmtSize(v.size_bytes) }}</span>
+          </button>
+        </div>
+        <div class="mt-3 flex justify-end">
+          <button class="rounded bg-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-600" @click="cancelChooser">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

@@ -9,6 +9,7 @@ export const playerStore = reactive({
   torrentId: null,
   fileId: null,
   infoHash: null,
+  tmdbKey: null,
   hasVideo: false,
 });
 
@@ -23,6 +24,7 @@ function persist() {
           torrentId: playerStore.torrentId,
           fileId: playerStore.fileId,
           infoHash: playerStore.infoHash,
+          tmdbKey: playerStore.tmdbKey,
         })
       );
     } else {
@@ -66,12 +68,19 @@ export function mediaKey(infoHash, fileId) {
   return null;
 }
 
-export function openInPlayer({ src, title, torrentId, fileId, infoHash }) {
+/** History key for the active playback: TMDB context wins over torrent identity. */
+export function currentHistoryKey() {
+  if (playerStore.tmdbKey) return playerStore.tmdbKey;
+  return mediaKey(playerStore.infoHash, playerStore.fileId);
+}
+
+export function openInPlayer({ src, title, torrentId, fileId, infoHash, tmdbKey }) {
   playerStore.src = src;
   playerStore.title = title ?? null;
   playerStore.torrentId = torrentId ?? null;
   playerStore.fileId = fileId ?? null;
   playerStore.infoHash = infoHash ?? null;
+  playerStore.tmdbKey = tmdbKey ?? null;
   playerStore.hasVideo = false;
   persist();
 }
@@ -82,6 +91,7 @@ export function clearPlayer() {
   playerStore.torrentId = null;
   playerStore.fileId = null;
   playerStore.infoHash = null;
+  playerStore.tmdbKey = null;
   playerStore.hasVideo = false;
   persist();
 }

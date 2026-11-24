@@ -21,7 +21,7 @@ use tauri::State;
 use crate::engine::{EngineShared, EngineState};
 use crate::storage::Db;
 
-fn parse_peers(peers: Option<Vec<String>>) -> Result<Option<Vec<std::net::SocketAddr>>, String> {
+pub(crate) fn parse_peers(peers: Option<Vec<String>>) -> Result<Option<Vec<std::net::SocketAddr>>, String> {
     let Some(peers) = peers else {
         return Ok(None);
     };

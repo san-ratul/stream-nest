@@ -15,9 +15,32 @@ pub struct AuthorizedSource {
     pub license_url: String,
     pub attribution: String,
     /// True only when StreamNest can hand the player a verified stream itself.
-    /// Curated sources link to official pages; direct playback stays false
-    /// unless a rights-verified stream source is wired by a provider.
     pub playable_in_app: bool,
+    /// "official_torrent" (rights-verified torrent published by the rights holder),
+    /// "official_page" (link to official download page), or "dev_fixture"
+    /// (local deterministic-seeder fixture, clearly labeled, for QA only).
+    #[serde(default)]
+    pub source_kind: String,
+    /// Official magnet URI published by the rights holder.
+    #[serde(default)]
+    pub magnet_uri: Option<String>,
+    /// Development fixture: path to a locally generated .torrent file.
+    #[serde(default)]
+    pub torrent_file: Option<String>,
+    /// Peers to seed from (dev fixtures use the local deterministic seeder).
+    #[serde(default)]
+    pub initial_peers: Vec<String>,
+    #[serde(default)]
+    pub quality: Option<String>,
+    #[serde(default)]
+    pub size_label: Option<String>,
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Runtime availability: dev fixtures require their .torrent file to exist.
+    #[serde(default)]
+    pub available: bool,
 }
 
 pub trait ContentSourceProvider: Send + Sync {
@@ -30,6 +53,24 @@ fn parse(raw: &str) -> Vec<AuthorizedSource> {
     serde_json::from_str(raw).expect("bundled authorized_sources.json must be valid")
 }
 
+fn check_available(entry: &AuthorizedSource) -> bool {
+    if !entry.playable_in_app {
+        // Page-level sources are always "available" as links.
+        return true;
+    }
+    if entry.source_kind == "dev_fixture" {
+        // Fixture torrent must exist locally; otherwise the source is hidden.
+        return entry
+            .torrent_file
+            .as_ref()
+            .map(|p| std::path::Path::new(p).is_file())
+            .unwrap_or(false);
+    }
+    // Official torrents are always offered (public swarm availability varies;
+    // the streaming workflow surfaces real engine errors honestly).
+    true
+}
+
 /// Curated, embedded provider. Every entry documents its license and official page.
 /// Additions require verified rights AND a verified TMDB id mapping.
 pub struct BundledContentSources {
@@ -38,9 +79,12 @@ pub struct BundledContentSources {
 
 impl BundledContentSources {
     pub fn new() -> Self {
-        Self {
-            entries: parse(include_str!("../../resources/authorized_sources.json")),
+        let mut entries: Vec<AuthorizedSource> =
+            parse(include_str!("../../resources/authorized_sources.json"));
+        for e in &mut entries {
+            e.available = check_available(e);
         }
+        Self { entries }
     }
 }
 
@@ -49,7 +93,8 @@ impl ContentSourceProvider for BundledContentSources {
         self.entries
             .iter()
             .filter(|e| {
-                e.media_type == media_type
+                e.available
+                    && e.media_type == media_type
                     && match media_type {
                         "movie" => e.tmdb_movie_id == Some(tmdb_id),
                         _ => e.tmdb_tv_id == Some(tmdb_id),
@@ -60,7 +105,7 @@ impl ContentSourceProvider for BundledContentSources {
     }
 
     fn all(&self) -> Vec<AuthorizedSource> {
-        self.entries.clone()
+        self.entries.iter().filter(|e| e.available).cloned().collect()
     }
 
     fn note(&self) -> &str {
@@ -80,11 +125,64 @@ mod tests {
             assert!(!entry.license.is_empty(), "license required");
             assert!(!entry.license_url.is_empty(), "license url required");
             assert!(!entry.source_url.is_empty(), "official page required");
-            assert!(!entry.playable_in_app, "bundled sources are page-level, not in-app streams");
+            match entry.source_kind.as_str() {
+                "official_torrent" => {
+                    assert!(entry.playable_in_app, "official torrents are playable");
+                    let magnet = entry.magnet_uri.as_ref().expect("magnet required");
+                    assert!(
+                        magnet.starts_with("magnet:?xt=urn:btih:"),
+                        "magnet must carry a btih hash"
+                    );
+                }
+                "dev_fixture" => {
+                    assert!(entry.playable_in_app, "fixtures are playable");
+                    assert!(entry.torrent_file.is_some(), "fixture needs a torrent file");
+                }
+                _ => assert!(!entry.playable_in_app, "page sources are not playable"),
+            }
         }
         let some_id = provider.all()[0].tmdb_movie_id.unwrap();
         let hits = provider.sources_for("movie", some_id);
         assert!(!hits.is_empty());
         assert!(provider.sources_for("movie", 999_999_999).is_empty());
+    }
+
+    #[test]
+    fn official_torrent_sources_exist_for_blender_films() {
+        let provider = BundledContentSources::new();
+        for tmdb_id in [10378, 45745, 133701] {
+            let hits = provider.sources_for("movie", tmdb_id);
+            assert!(
+                hits.iter().any(|h| h.source_kind == "official_torrent" && h.playable_in_app),
+                "tmdb {tmdb_id} must have a playable official torrent source"
+            );
+        }
+    }
+
+    #[test]
+    fn unavailable_dev_fixtures_are_hidden() {
+        let provider = BundledContentSources::new();
+        let all = provider.all();
+        for entry in all.iter().filter(|e| e.source_kind == "dev_fixture") {
+            // On this machine the fixture either exists (test media present) or the
+            // entry is filtered out entirely.
+            let file_exists = entry
+                .torrent_file
+                .as_ref()
+                .map(|p| std::path::Path::new(p).is_file())
+                .unwrap_or(false);
+            assert!(file_exists, "available fixture must have its torrent file");
+        }
+    }
+
+    #[test]
+    fn page_level_sources_stay_present() {
+        let provider = BundledContentSources::new();
+        // Cosmos Laundromat has no verified in-app torrent: page-level only.
+        let hits = provider.sources_for("movie", 358332);
+        assert!(
+            hits.iter().any(|h| h.source_kind == "official_page" && !h.playable_in_app),
+            "page-level fallback must remain"
+        );
     }
 }

@@ -40,7 +40,7 @@ impl EngineState {
     }
 }
 
-async fn build_session(data_dir: PathBuf) -> anyhow::Result<Arc<EngineShared>> {
+pub(crate) async fn build_session(data_dir: PathBuf) -> anyhow::Result<Arc<EngineShared>> {
     let download_dir = data_dir.join("downloads");
     let engine_dir = data_dir.join("engine");
     let session_dir = engine_dir.join("session");

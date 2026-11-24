@@ -24,9 +24,14 @@ import {
   playerRenderDiagnostics,
 } from "../composables/usePlayer";
 import { invoke } from "@tauri-apps/api/core";
-import { playerStore, mediaKey } from "../stores/player";
+import { useRouter } from "vue-router";
+import { playerStore, currentHistoryKey } from "../stores/player";
 import { torrentStore, fmtSpeed, fmtBytes } from "../stores/torrents";
+import { endPlaybackSession } from "../composables/playback";
 import AppState from "../components/common/AppState.vue";
+
+const router = useRouter();
+const pendingAutoPlay = ref(null);
 
 const volume = ref(100);
 const muted = ref(false);
@@ -110,7 +115,7 @@ function trackLabel(t) {
 }
 
 function currentMediaKey() {
-  return mediaKey(playerStore.infoHash, playerStore.fileId);
+  return currentHistoryKey();
 }
 
 async function updateVideoGeometry() {
@@ -417,6 +422,8 @@ onUnmounted(async () => {
   window.removeEventListener("resize", updateVideoGeometry);
   if (resizeObserver) resizeObserver.disconnect();
   await saveProgress(true);
+  // Release the playback session (torrents are never stopped by playback).
+  if (playerStore.tmdbKey) endPlaybackSession(playerStore.tmdbKey);
   if (fullscreen.value) appWindow.setFullscreen(false).catch(() => {});
   playerDestroy();
 });
@@ -446,6 +453,50 @@ function fmt(t) {
   const mm = String(m).padStart(2, "0");
   const ss = String(s).padStart(2, "0");
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+// ---- Torrent info panel (only for torrent-backed playback) ----
+const torrentPct = computed(() => {
+  const s = sourceTorrent.value?.stats;
+  if (!s) return null;
+  const done = s.progress_bytes ?? s.downloaded_bytes ?? 0;
+  const total = s.total_bytes ?? 0;
+  return total > 0 ? Math.min(100, Math.round((done / total) * 100)) : null;
+});
+const downSpeed = computed(() => {
+  const mbps = sourceTorrent.value?.stats?.live?.download_speed?.mbps ?? null;
+  return mbps != null ? fmtSpeed(mbps * 1024 * 1024) : null;
+});
+const upSpeed = computed(() => {
+  const mbps = sourceTorrent.value?.stats?.live?.upload_speed?.mbps ?? null;
+  return mbps != null ? fmtSpeed(mbps * 1024 * 1024) : null;
+});
+const bufferAhead = computed(() => {
+  if (playerState.timePos == null || playerState.cacheTime == null) return null;
+  const ahead = playerState.cacheTime - playerState.timePos;
+  return ahead > 0 ? Math.round(ahead) : 0;
+});
+
+// ---- Next episode (TMDB playback only) ----
+const nextEpisode = computed(() => {
+  const key = playerStore.tmdbKey;
+  if (!key) return null;
+  const parts = key.split(":");
+  // tmdb:tv:{id}:{season}:{episode}
+  if (parts.length !== 5 || parts[1] !== "tv") return null;
+  const [, , showId, season, episode] = parts;
+  const nextEp = Number(episode) + 1;
+  return { showId, season: Number(season), episode: nextEp, route: `/tv/${showId}?play=${season}:${nextEp}` };
+});
+
+async function playNextEpisode() {
+  if (!nextEpisode.value) return;
+  await saveProgress(true);
+  const { showId, season, episode, route } = nextEpisode.value;
+  // The TV details page resolves the source + episode match for the next episode.
+  router.push(route);
+  // Auto-continue: the details page picks the flow up via the play param.
+  pendingAutoPlay.value = { season, episode };
 }
 </script>
 
@@ -654,6 +705,28 @@ function fmt(t) {
         <span class="font-mono text-xs text-slate-300 tabular-nums">
           {{ fmt(scrubbing ? scrubValue : playerState.timePos) }} / {{ fmt(playerState.duration) }}
         </span>
+
+        <!-- Compact torrent info: reflects real engine state, no fake progress -->
+        <span
+          v-if="sourceTorrent && torrentPct != null"
+          class="hidden items-center gap-1.5 rounded bg-black/40 px-2 py-1 font-mono text-[10px] text-slate-400 md:inline-flex"
+          :title="`Torrent: ${torrentPct}% · ↓ ${downSpeed ?? '—'} · ↑ ${upSpeed ?? '—'} · buffer +${bufferAhead ?? 0}s`"
+        >
+          <span class="text-sky-300">{{ torrentPct }}%</span>
+          <span v-if="downSpeed">↓ {{ downSpeed }}</span>
+          <span v-if="upSpeed">↑ {{ upSpeed }}</span>
+          <span v-if="bufferAhead != null" class="text-emerald-300">buffer +{{ bufferAhead }}s</span>
+        </span>
+
+        <!-- Next episode (TMDB playback) -->
+        <button
+          v-if="nextEpisode"
+          class="rounded-lg bg-sky-500/20 px-2.5 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/30"
+          title="Next episode"
+          @click="playNextEpisode"
+        >
+          Next episode ▶
+        </button>
 
         <button
           class="rounded-lg px-2 py-1.5 text-sm text-slate-100 hover:bg-white/10"

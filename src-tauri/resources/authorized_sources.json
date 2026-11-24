@@ -10,7 +10,33 @@
     "license": "CC-BY 3.0",
     "license_url": "https://peach.blender.org/about/",
     "attribution": "(c) copyright 2008, Blender Foundation / www.bigbuckbunny.org",
-    "playable_in_app": false
+    "playable_in_app": true,
+    "source_kind": "official_torrent",
+    "magnet_uri": "magnet:?xt=urn:btih:dd8255ecdc7ca55fb0bbf81323d87062db1f6d1c&dn=Big+Buck+Bunny&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969%2Fannounce",
+    "quality": "1080p",
+    "size_label": "~276 MB",
+    "format": "MOV/MP4",
+    "language": "EN"
+  },
+  {
+    "provider_id": "blender-peach-fixture",
+    "title": "Big Buck Bunny (dev fixture)",
+    "media_type": "movie",
+    "tmdb_movie_id": 10378,
+    "tmdb_tv_id": null,
+    "source_name": "Local deterministic seeder — StreamNest dev fixture",
+    "source_url": "https://peach.blender.org",
+    "license": "CC-BY 3.0 (local file)",
+    "license_url": "https://peach.blender.org/about/",
+    "attribution": "(c) copyright 2008, Blender Foundation — local 10s sample fixture",
+    "playable_in_app": true,
+    "source_kind": "dev_fixture",
+    "torrent_file": "E:\\streamnest\\.testmedia\\torrents\\bbb_1080_10s.mp4.torrent",
+    "initial_peers": ["127.0.0.1:6900"],
+    "quality": "1080p (10s sample)",
+    "size_label": "small sample",
+    "format": "MP4",
+    "language": "EN"
   },
   {
     "provider_id": "blender-durian",
@@ -23,7 +49,33 @@
     "license": "CC-BY 3.0",
     "license_url": "https://durian.blender.org/about/",
     "attribution": "(c) copyright Blender Foundation | durian.blender.org",
-    "playable_in_app": false
+    "playable_in_app": true,
+    "source_kind": "official_torrent",
+    "magnet_uri": "magnet:?xt=urn:btih:08ada5a7a6183aae1e09d831df6748d1056693a4&dn=Sintel&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969%2Fannounce",
+    "quality": "1080p",
+    "size_label": "~1.1 GB",
+    "format": "MKV",
+    "language": "ES/EN"
+  },
+  {
+    "provider_id": "blender-durian-fixture",
+    "title": "Sintel (dev fixture)",
+    "media_type": "movie",
+    "tmdb_movie_id": 45745,
+    "tmdb_tv_id": null,
+    "source_name": "Local deterministic seeder — StreamNest dev fixture",
+    "source_url": "https://durian.blender.org",
+    "license": "CC-BY 3.0 (local file)",
+    "license_url": "https://durian.blender.org/about/",
+    "attribution": "(c) copyright Blender Foundation — local file fixture",
+    "playable_in_app": true,
+    "source_kind": "dev_fixture",
+    "torrent_file": "E:\\streamnest\\.testmedia\\torrents\\Sintel.2010.1080p.mkv.torrent",
+    "initial_peers": ["127.0.0.1:6900"],
+    "quality": "1080p",
+    "size_label": "~1.1 GB",
+    "format": "MKV",
+    "language": "EN"
   },
   {
     "provider_id": "blender-mango",
@@ -36,7 +88,13 @@
     "license": "CC-BY 3.0",
     "license_url": "https://mango.blender.org/about/",
     "attribution": "(c) copyright Blender Foundation | mango.blender.org",
-    "playable_in_app": false
+    "playable_in_app": true,
+    "source_kind": "official_torrent",
+    "magnet_uri": "magnet:?xt=urn:btih:209c8226b299b308beaf2b9cd3fb49212dbd13ec&dn=Tears+of+Steel&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce",
+    "quality": "1080p",
+    "size_label": "~530 MB",
+    "format": "MP4",
+    "language": "EN"
   },
   {
     "provider_id": "blender-gooseberry",
@@ -49,6 +107,7 @@
     "license": "CC-BY 4.0",
     "license_url": "https://gooseberry.blender.org/about/",
     "attribution": "(c) copyright Blender Foundation | gooseberry.blender.org",
-    "playable_in_app": false
+    "playable_in_app": false,
+    "source_kind": "official_page"
   }
 ]

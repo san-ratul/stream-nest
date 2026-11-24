@@ -514,6 +514,20 @@ pub struct MovieDetail {
     pub details_fetched: bool,
 }
 
+pub fn movie_card(conn: &Connection, tmdb_id: i64) -> rusqlite::Result<CatalogCard> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {MOVIE_CARD_COLS} FROM movies WHERE tmdb_id = ?1"
+    ))?;
+    stmt.query_row([tmdb_id], |r| card_from_row(r, "movie"))
+}
+
+pub fn tv_card(conn: &Connection, tmdb_id: i64) -> rusqlite::Result<CatalogCard> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {TV_CARD_COLS} FROM tv_shows WHERE tmdb_id = ?1"
+    ))?;
+    stmt.query_row([tmdb_id], |r| card_from_row(r, "tv"))
+}
+
 pub fn movie_detail(conn: &Connection, tmdb_id: i64) -> rusqlite::Result<Option<MovieDetail>> {
     let mut stmt = conn.prepare(
         "SELECT tmdb_id, title, COALESCE(release_date,''), poster_path, vote_average, overview,

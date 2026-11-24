@@ -4,6 +4,7 @@ pub mod repo;
 pub mod sources;
 pub mod sync;
 pub mod tmdb;
+pub mod video;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -383,6 +384,22 @@ pub fn catalog_set_pages(db: State<'_, Db>, pages: i64) -> MetaResult<()> {
         [pages.clamp(1, 5).to_string()],
     )?;
     Ok(())
+}
+
+/// Local-only lookup of a catalog card (used by Continue Watching rows for posters).
+#[tauri::command]
+pub fn catalog_card_lookup(
+    db: State<'_, Db>,
+    media_type: String,
+    tmdb_id: i64,
+) -> MetaResult<Option<CatalogCard>> {
+    let conn = db.0.lock();
+    let card = match media_type.as_str() {
+        "movie" => repo::movie_card(&conn, tmdb_id).ok(),
+        "tv" => repo::tv_card(&conn, tmdb_id).ok(),
+        _ => None,
+    };
+    Ok(card)
 }
 
 /// Convenience for tests and wiring.

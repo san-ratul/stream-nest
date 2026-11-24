@@ -15,11 +15,39 @@ import {
   loadFavorites,
   startSync,
   isSyncRunning,
+  imageUrl,
+  SIZES,
 } from "../stores/catalog";
 
 const router = useRouter();
 const history = ref([]);
 const loadingHistory = ref(true);
+const cwPosters = ref({}); // media_key -> poster URL
+
+function parseHistoryKey(mediaKey) {
+  const parts = mediaKey.split(":");
+  if (parts[0] === "tmdb") {
+    if (parts.length === 3) return { tmdb: true, mediaType: parts[1], id: Number(parts[2]) };
+    if (parts.length === 5) {
+      return {
+        tmdb: true,
+        mediaType: "tv",
+        id: Number(parts[1] ? parts[2] : parts[2]),
+        season: Number(parts[3]),
+        episode: Number(parts[4]),
+      };
+    }
+  }
+  return { tmdb: false };
+}
+
+function cwLabel(row) {
+  const parsed = parseHistoryKey(row.media_key);
+  if (parsed.tmdb && parsed.season != null) {
+    return `S${String(parsed.season).padStart(2, "0")}E${String(parsed.episode).padStart(2, "0")}`;
+  }
+  return null;
+}
 
 async function loadHistory() {
   try {
@@ -27,6 +55,26 @@ async function loadHistory() {
     history.value = (rows ?? []).filter(
       (r) => r.position_seconds > 10 && r.duration_seconds > 0 && r.position_seconds < r.duration_seconds * 0.95
     );
+    // Posters for TMDB-backed rows from the local catalog.
+    for (const row of history.value) {
+      const parsed = parseHistoryKey(row.media_key);
+      if (parsed.tmdb && cwPosters.value[row.media_key] == null) {
+        try {
+          const card = await invoke("catalog_card_lookup", {
+            mediaType: parsed.mediaType,
+            tmdbId: parsed.id,
+          });
+          cwPosters.value = {
+            ...cwPosters.value,
+            [row.media_key]: card?.poster_path
+              ? await imageUrl(card.poster_path, "poster", SIZES.thumb)
+              : null,
+          };
+        } catch {
+          cwPosters.value = { ...cwPosters.value, [row.media_key]: null };
+        }
+      }
+    }
   } catch {
     history.value = [];
   } finally {
@@ -48,12 +96,15 @@ function openCard(card) {
 }
 
 async function resumeHistory(row) {
-  // Torrent media keys: "{info_hash}:{file_index}". TMDB keys route to details instead.
-  const parts = row.media_key.split(":");
-  if (parts.length === 3 && parts[0] === "tmdb") {
-    router.push(parts[1] === "tv" ? `/tv/${parts[2]}` : `/movie/${parts[2]}`);
+  // TMDB keys route back to the details page: source availability is re-checked
+  // there and the player resumes from the saved position automatically.
+  const parsed = parseHistoryKey(row.media_key);
+  if (parsed.tmdb) {
+    router.push(parsed.mediaType === "tv" ? `/tv/${parsed.id}` : `/movie/${parsed.id}`);
     return;
   }
+  // Torrent keys: "{info_hash}:{file_index}" — resume the existing stream.
+  const parts = row.media_key.split(":");
   if (parts.length !== 2) return;
   const [hash, fileIdx] = parts;
   try {
@@ -74,6 +125,14 @@ async function resumeHistory(row) {
 function progressOf(row) {
   if (!row.duration_seconds) return 0;
   return Math.min(100, Math.round((row.position_seconds / row.duration_seconds) * 100));
+}
+
+function remainingOf(row) {
+  if (!row.duration_seconds) return null;
+  const left = Math.max(0, Math.round(row.duration_seconds - row.position_seconds));
+  if (left < 60) return `${left}s`;
+  if (left < 3600) return `${Math.round(left / 60)} min`;
+  return `${Math.floor(left / 3600)}h ${Math.round((left % 3600) / 60)}m`;
 }
 
 function fmtClock(s) {
@@ -150,22 +209,36 @@ async function triggerSync() {
           <div
             v-for="row in history"
             :key="row.id"
-            class="rounded-lg border border-slate-700/60 bg-slate-800/40 p-3"
+            class="flex gap-3 rounded-lg border border-slate-700/60 bg-slate-800/40 p-3"
           >
-            <div class="truncate text-sm font-medium text-slate-100">{{ row.title }}</div>
-            <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/70">
-              <div class="h-full rounded-full bg-sky-400" :style="{ width: `${progressOf(row)}%` }"></div>
+            <div class="h-20 w-14 shrink-0 overflow-hidden rounded bg-slate-800">
+              <img
+                v-if="cwPosters[row.media_key]"
+                :src="cwPosters[row.media_key]"
+                :alt="row.title"
+                class="h-full w-full object-cover"
+                @error="$event.target.style.display = 'none'"
+              />
+              <div v-else class="flex h-full items-center justify-center text-slate-600">🎬</div>
             </div>
-            <div class="mt-2 flex items-center justify-between">
-              <span class="text-xs text-slate-400">
-                {{ fmtClock(row.position_seconds) }} / {{ fmtClock(row.duration_seconds) }} · {{ progressOf(row) }}%
-              </span>
-              <button
-                class="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 hover:bg-sky-500/30"
-                @click="resumeHistory(row)"
-              >
-                ▶ Resume
-              </button>
+            <div class="min-w-0 flex-1">
+              <div class="truncate text-sm font-medium text-slate-100">{{ row.title }}</div>
+              <div v-if="cwLabel(row)" class="text-xs text-sky-300">{{ cwLabel(row) }}</div>
+              <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/70">
+                <div class="h-full rounded-full bg-sky-400" :style="{ width: `${progressOf(row)}%` }"></div>
+              </div>
+              <div class="mt-2 flex items-center justify-between">
+                <span class="text-xs text-slate-400">
+                  {{ fmtClock(row.position_seconds) }} / {{ fmtClock(row.duration_seconds) }}
+                  <span v-if="remainingOf(row)"> · {{ remainingOf(row) }} left</span>
+                </span>
+                <button
+                  class="rounded bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300 hover:bg-sky-500/30"
+                  @click="resumeHistory(row)"
+                >
+                  ▶ Resume
+                </button>
+              </div>
             </div>
           </div>
         </div>

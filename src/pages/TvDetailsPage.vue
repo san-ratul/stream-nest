@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { useRoute, useRouter } from "vue-router";
 import AppState from "../components/common/AppState.vue";
+import SourcePanel from "../components/streaming/SourcePanel.vue";
 import {
   imageUrl,
   SIZES,
@@ -13,6 +14,11 @@ import {
   toggleLibrary,
   isInLibrary,
 } from "../stores/catalog";
+import {
+  playbackStore,
+  startAuthorizedPlayback,
+  listenPlaybackStages,
+} from "../composables/playback";
 
 const route = useRoute();
 const router = useRouter();
@@ -30,6 +36,75 @@ const episodes = ref({}); // season_number -> EpisodeRow[]
 const loadingSeason = ref(null);
 const historyRows = ref([]);
 const seasonPosters = ref({});
+
+// Playback flow state
+const busySource = ref(null);
+const playbackError = ref(null);
+const episodeChooser = ref(null); // { matches, videos, season, episode, prepared, source }
+const chooserVideos = ref(null);
+let chooserResolve = null;
+
+function fileChooser(videos) {
+  return new Promise((resolve) => {
+    chooserVideos.value = videos;
+    chooserResolve = resolve;
+  });
+}
+
+function resolveChooser(fileIndex) {
+  chooserVideos.value = null;
+  chooserResolve?.(fileIndex);
+  chooserResolve = null;
+}
+
+function cancelChooser() {
+  chooserVideos.value = null;
+  chooserResolve?.(null);
+  chooserResolve = null;
+}
+
+function episodeKey(seasonNumber, episodeNumber) {
+  return `tmdb:tv:${showId}:${seasonNumber}:${episodeNumber}`;
+}
+
+function historyFor(seasonNumber, episodeNumber) {
+  const key = episodeKey(seasonNumber, episodeNumber);
+  return historyRows.value.find((r) => r.media_key === key) ?? null;
+}
+
+function isWatched(seasonNumber, episodeNumber) {
+  const row = historyFor(seasonNumber, episodeNumber);
+  return Boolean(row && row.duration_seconds > 0 && row.position_seconds >= row.duration_seconds * 0.95);
+}
+
+function isNextEpisode(seasonNumber, episodeNumber) {
+  // next after the most recent watched/in-progress episode in this season listing
+  const current = episodeChooser.value?.season === seasonNumber && episodeChooser.value?.episode === episodeNumber;
+  return current === true;
+}
+
+async function onEpisodePlay(source, seasonNumber, episodeNumber, episodeName) {
+  busySource.value = source.provider_id;
+  playbackError.value = null;
+  try {
+    const result = await startAuthorizedPlayback({
+      source,
+      tmdbKey: episodeKey(seasonNumber, episodeNumber),
+      title: `${detail.value.card.title} S${String(seasonNumber).padStart(2, "0")}E${String(episodeNumber).padStart(2, "0")}${episodeName ? ` · ${episodeName}` : ""}`,
+      season: seasonNumber,
+      episode: episodeNumber,
+      onNeedFileChoice: fileChooser,
+    });
+    if (result?.started) {
+      router.push("/player");
+    }
+  } catch (err) {
+    playbackError.value = String(err?.message ?? err);
+  } finally {
+    busySource.value = null;
+    playbackStore.stage = null;
+  }
+}
 
 const mediaKey = tmdbMediaKey("tv", showId);
 
@@ -74,7 +149,7 @@ async function load() {
   }
 }
 
-onMounted(load);
+
 
 const playableSources = computed(() => sources.value.filter((s) => s.playable_in_app));
 const pageSources = computed(() => sources.value.filter((s) => !s.playable_in_app));
@@ -128,6 +203,17 @@ async function onFav() {
 async function onLibrary() {
   inLibrary.value = await toggleLibrary(mediaKey, detail.value.card.title, "tmdb_tv");
 }
+
+const episodePlayTarget = ref(null);
+
+function openEpisodeSource(seasonNumber, episodeNumber, name) {
+  episodePlayTarget.value = { season: seasonNumber, episode: episodeNumber, name };
+}
+
+onMounted(() => {
+  load();
+  listenPlaybackStages();
+});
 </script>
 
 <template>
@@ -216,13 +302,20 @@ async function onLibrary() {
               <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-300">{{ detail.card.overview || "No overview available." }}</p>
 
               <div v-if="playableSources.length" class="mt-5">
-                <button
-                  v-for="s in playableSources"
-                  :key="s.provider_id"
-                  class="rounded-md bg-emerald-500/90 px-5 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400"
-                >
-                  ▶ Play ({{ s.source_name }})
-                </button>
+                <div v-if="playbackError" class="mb-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  {{ playbackError }}
+                  <button class="ml-2 underline hover:text-red-200" @click="playbackError = null">dismiss</button>
+                </div>
+                <SourcePanel
+                  v-if="episodePlayTarget"
+                  :sources="sources"
+                  :busy-source="busySource"
+                  :stage="playbackStore.stage"
+                  @play="(s) => onEpisodePlay(s, episodePlayTarget.season, episodePlayTarget.episode, episodePlayTarget.name)"
+                />
+                <p v-else class="text-xs text-slate-500">
+                  Authorized sources available — open an episode below and pick a source to stream it.
+                </p>
               </div>
               <div v-else class="mt-5 max-w-2xl rounded-lg border border-slate-700/60 bg-slate-800/40 p-4">
                 <div class="text-sm font-semibold text-slate-200">No authorized in-app source</div>
@@ -320,6 +413,14 @@ async function onLibrary() {
                           <span v-else-if="watchedBadge(s.season_number, ep.episode_number) === 'in-progress'"
                             class="rounded bg-sky-500/15 px-1.5 text-[10px] font-bold uppercase text-sky-300">In progress</span>
                           <span v-if="ep.vote_average != null" class="text-xs text-amber-300/80">★ {{ Number(ep.vote_average).toFixed(1) }}</span>
+                          <button
+                            v-if="playableSources.length"
+                            class="ml-auto shrink-0 rounded bg-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-300 hover:bg-emerald-500/30"
+                            :disabled="busySource != null"
+                            @click="openEpisodeSource(s.season_number, ep.episode_number, ep.name)"
+                          >
+                            ▶ Play
+                          </button>
                         </div>
                         <div class="text-xs text-slate-500">{{ ep.air_date || "No air date" }}</div>
                         <p class="mt-1 line-clamp-2 text-xs leading-4 text-slate-400">{{ ep.overview || "No overview." }}</p>
