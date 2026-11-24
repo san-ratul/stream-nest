@@ -1,0 +1,54 @@
+[
+  {
+    "provider_id": "blender-peach",
+    "title": "Big Buck Bunny",
+    "media_type": "movie",
+    "tmdb_movie_id": 10378,
+    "tmdb_tv_id": null,
+    "source_name": "Blender Foundation — Peach project",
+    "source_url": "https://peach.blender.org",
+    "license": "CC-BY 3.0",
+    "license_url": "https://peach.blender.org/about/",
+    "attribution": "(c) copyright 2008, Blender Foundation / www.bigbuckbunny.org",
+    "playable_in_app": false
+  },
+  {
+    "provider_id": "blender-durian",
+    "title": "Sintel",
+    "media_type": "movie",
+    "tmdb_movie_id": 45745,
+    "tmdb_tv_id": null,
+    "source_name": "Blender Foundation — Durian project",
+    "source_url": "https://durian.blender.org",
+    "license": "CC-BY 3.0",
+    "license_url": "https://durian.blender.org/about/",
+    "attribution": "(c) copyright Blender Foundation | durian.blender.org",
+    "playable_in_app": false
+  },
+  {
+    "provider_id": "blender-mango",
+    "title": "Tears of Steel",
+    "media_type": "movie",
+    "tmdb_movie_id": 133701,
+    "tmdb_tv_id": null,
+    "source_name": "Blender Foundation — Mango project",
+    "source_url": "https://mango.blender.org",
+    "license": "CC-BY 3.0",
+    "license_url": "https://mango.blender.org/about/",
+    "attribution": "(c) copyright Blender Foundation | mango.blender.org",
+    "playable_in_app": false
+  },
+  {
+    "provider_id": "blender-gooseberry",
+    "title": "Cosmos Laundromat",
+    "media_type": "movie",
+    "tmdb_movie_id": 358332,
+    "tmdb_tv_id": null,
+    "source_name": "Blender Foundation — Gooseberry project",
+    "source_url": "https://gooseberry.blender.org",
+    "license": "CC-BY 4.0",
+    "license_url": "https://gooseberry.blender.org/about/",
+    "attribution": "(c) copyright Blender Foundation | gooseberry.blender.org",
+    "playable_in_app": false
+  }
+]

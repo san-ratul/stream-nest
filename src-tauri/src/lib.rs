@@ -2,9 +2,11 @@ pub mod catalog;
 mod commands;
 mod engine;
 mod events;
+pub mod metadata;
 pub mod streaming;
 pub mod storage;
 
+use std::sync::Arc;
 use tauri::Manager;
 
 #[tauri::command]
@@ -36,6 +38,52 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             let db = storage::Db::open(data_dir.join("streamnest.db")).map_err(|e| e.to_string())?;
             app.manage(db);
+
+            // TMDB metadata stack: client only when a key is configured; the key
+            // never reaches the frontend and never appears in logs.
+            let api_key = metadata::config::load_tmdb_api_key();
+            let client = match api_key {
+                Some(key) => match metadata::build_client(key) {
+                    Ok(c) => Some(c),
+                    Err(e) => {
+                        log::warn!("TMDB client init failed: {e}");
+                        None
+                    }
+                },
+                None => {
+                    log::info!("TMDB_API_KEY not configured; catalog discovery runs in local-only mode");
+                    None
+                }
+            };
+            let tmdb_state = metadata::TmdbState {
+                client,
+                image_config: Arc::new(parking_lot::RwLock::new(metadata::tmdb::ImageConfig::default())),
+                images: parking_lot::RwLock::new(None),
+                sync: Arc::new(metadata::sync::SyncState::new()),
+                sources: Box::new(metadata::sources::BundledContentSources::new()),
+                data_dir: data_dir.clone(),
+            };
+            app.manage(tmdb_state);
+
+            // Local image proxy (127.0.0.1, token path, bounded cache).
+            let handle_for_images = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = handle_for_images.state::<metadata::TmdbState>();
+                let cache_dir = state.data_dir.join("images");
+                match metadata::images::spawn(
+                    cache_dir,
+                    state.image_config.clone(),
+                    512, // MB; bounded by design
+                )
+                .await
+                {
+                    Ok(info) => {
+                        *state.images.write() = Some(info);
+                    }
+                    Err(e) => log::error!("image proxy failed to start: {e}"),
+                }
+            });
+
             tauri::async_runtime::spawn(engine::init(handle));
             Ok(())
         })
@@ -44,6 +92,17 @@ pub fn run() {
             dev_log,
             catalog::catalog_list,
             catalog::catalog_get,
+            metadata::catalog_image_url,
+            metadata::catalog_home,
+            metadata::catalog_search,
+            metadata::movie_details,
+            metadata::tv_details,
+            metadata::season_episodes,
+            metadata::catalog_status,
+            metadata::catalog_sync_start,
+            metadata::catalog_sync_cancel,
+            metadata::catalog_clear,
+            metadata::catalog_set_pages,
             storage::commands::db_upsert_torrent,
             storage::commands::history_upsert,
             storage::commands::history_list,
