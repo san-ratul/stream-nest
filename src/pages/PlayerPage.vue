@@ -447,7 +447,7 @@ function fmt(t) {
       :class="playerStore.hasVideo ? 'opacity-0' : 'opacity-100'"
     ></div>
 
-    <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 via-black/30 to-transparent pl-[4.25rem] pr-5 pb-8 pt-3">
+    <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/85 via-black/55 to-transparent pl-[4.25rem] pr-5 pb-8 pt-3">
       <div class="flex items-center gap-3 text-xs text-slate-200 drop-shadow">
         <span class="max-w-[30%] truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
         <span class="rounded bg-white/10 px-1.5 py-0.5">{{ playerState.hwdec === "no" ? "sw decode" : `hwdec ${playerState.hwdec ?? "?"}` }}</span>
@@ -478,7 +478,7 @@ function fmt(t) {
         </button>
         <div
           v-if="audioOpen"
-          class="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-black/70 shadow-2xl shadow-black/60 backdrop-blur-xl"
+          class="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/60 backdrop-blur-xl"
         >
           <button
             v-for="t in audioTracks"
@@ -522,7 +522,7 @@ function fmt(t) {
         {{ fullscreen ? "Exit fullscreen" : "Fullscreen" }}
       </button>
       <button
-        class="rounded-lg bg-white/10 px-3 py-1 text-xs text-slate-100 shadow backdrop-blur hover:bg-white/20"
+        class="flex h-9 items-center justify-center rounded-lg border border-red-400/40 bg-red-600/70 px-2.5 text-xs text-white shadow backdrop-blur transition hover:bg-red-500/90"
         title="Close player"
         @click="$router.back()"
       >
@@ -532,7 +532,7 @@ function fmt(t) {
 
     <div
       v-if="subsOpen"
-      class="nice-scroll absolute right-4 top-20 z-40 flex max-h-[65%] w-80 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/60 shadow-2xl shadow-black/60 backdrop-blur-xl"
+      class="nice-scroll absolute right-4 top-20 z-40 flex max-h-[65%] w-80 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/60 backdrop-blur-xl"
     >
       <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <span class="text-sm font-semibold text-slate-100">Subtitles</span>
@@ -569,7 +569,7 @@ function fmt(t) {
 
     <div
       ref="controlsRef"
-      class="absolute inset-x-4 bottom-3 z-10 rounded-2xl border border-white/10 bg-black/35 px-5 pb-3.5 pt-2 shadow-2xl shadow-black/60 backdrop-blur-xl"
+      class="absolute inset-x-4 bottom-3 z-10 rounded-2xl border border-white/10 bg-[#111827]/85 px-5 pb-3.5 pt-2 shadow-2xl shadow-black/60 backdrop-blur-xl"
       data-player-controls
     >
       <div class="group relative flex h-4 cursor-pointer items-center">
@@ -653,7 +653,7 @@ function fmt(t) {
           </button>
           <div
             v-if="aspectOpen"
-            class="absolute bottom-full left-1/2 z-20 mb-2 w-36 -translate-x-1/2 overflow-hidden rounded-xl border border-white/10 bg-black/70 shadow-2xl shadow-black/60 backdrop-blur-xl"
+            class="absolute bottom-full left-1/2 z-20 mb-2 w-36 -translate-x-1/2 overflow-hidden rounded-xl border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/60 backdrop-blur-xl"
           >
             <button
               v-for="a in ASPECTS"

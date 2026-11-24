@@ -103,7 +103,7 @@ watch(
 <template>
   <div class="relative h-full w-full">
     <button
-      class="absolute left-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/50 text-lg text-slate-100 shadow-lg backdrop-blur-xl transition hover:bg-white/10"
+      class="absolute left-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-[#111827]/85 text-lg text-slate-100 shadow-lg backdrop-blur-xl transition hover:bg-white/10"
       title="Menu (Esc closes)"
       @click="navOpen = !navOpen"
     >
@@ -119,7 +119,7 @@ watch(
 
     <div v-if="navOpen" class="fixed inset-0 z-40" @click.self="navOpen = false">
       <div
-        class="absolute left-4 top-16 z-50 w-72 overflow-hidden rounded-2xl border border-white/10 bg-black/60 shadow-2xl shadow-black/60 backdrop-blur-xl"
+        class="absolute left-4 top-16 z-50 w-72 overflow-hidden rounded-2xl border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/60 backdrop-blur-xl"
         @click.stop
       >
         <div class="flex items-center gap-2 border-b border-white/10 px-4 py-3">
