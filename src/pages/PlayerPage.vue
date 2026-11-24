@@ -89,6 +89,21 @@ const ASPECTS = [
   { label: "2.35:1", value: "2.35" },
 ];
 
+const FLAG_BY_LANG = {
+  en: "🇬🇧", it: "🇮🇹", ja: "🇯🇵", fr: "🇫🇷", de: "🇩🇪", es: "🇪🇸",
+  pt: "🇵🇹", ru: "🇷🇺", ar: "🇸🇦", cs: "🇨🇿", ko: "🇰🇷", zh: "🇨🇳",
+  hi: "🇮🇳", nl: "🇳🇱", pl: "🇵🇱", tr: "🇹🇷", sv: "🇸🇪", da: "🇩🇰",
+  fi: "🇫🇮", no: "🇳🇴", el: "🇬🇷", he: "🇮🇱", th: "🇹🇭", hu: "🇭🇺",
+  ro: "🇷🇴", bg: "🇧🇬", uk: "🇺🇦", id: "🇮🇩", vi: "🇻🇳", ms: "🇲🇾",
+};
+
+function langFlag(t) {
+  const raw = String(t?.lang ?? "").toLowerCase();
+  const code3 = raw.match(/^([a-z]{2,3})/)?.[1] ?? "";
+  const code2 = code3 === "eng" ? "en" : code3;
+  return FLAG_BY_LANG[code2] ?? "🏳";
+}
+
 function langCode(t) {
   const raw = t?.lang || t?.title || "";
   const code = String(raw).trim();
@@ -118,11 +133,17 @@ async function updateVideoGeometry() {
   if (rect.width < 50 || rect.height < 50) return;
   const W = window.innerWidth;
   const H = window.innerHeight;
+  let bottom = Math.max(0, (H - rect.bottom) / H);
+  // reserve the controls bar height so subtitles (incl. ASS scripts) stay above it
+  if (controlsRef.value) {
+    const cr = controlsRef.value.getBoundingClientRect();
+    bottom = Math.max(bottom, Math.max(0, (H - cr.top) / H));
+  }
   const ratio = {
     left: Math.max(0, rect.left / W),
     right: Math.max(0, (W - rect.right) / W),
     top: Math.max(0, rect.top / H),
-    bottom: Math.max(0, (H - rect.bottom) / H),
+    bottom,
   };
   try {
     await playerSetVideoMarginRatio(ratio);
@@ -438,7 +459,7 @@ function fmt(t) {
       :class="playerStore.hasVideo ? 'opacity-0' : 'opacity-100'"
     ></div>
 
-    <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-5 pb-8 pt-3">
+    <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 via-black/30 to-transparent pl-[4.25rem] pr-5 pb-8 pt-3">
       <div class="flex items-center gap-3 text-xs text-slate-200 drop-shadow">
         <span class="max-w-[30%] truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
         <span class="rounded bg-white/10 px-1.5 py-0.5">{{ playerState.hwdec === "no" ? "sw decode" : `hwdec ${playerState.hwdec ?? "?"}` }}</span>
@@ -465,7 +486,7 @@ function fmt(t) {
             @change="pickAudio($event.target.value)"
           >
             <option v-for="t in audioTracks" :key="t.id" :value="t.id">
-              {{ langCode(t) }}{{ t.default ? " •" : "" }}
+              {{ langFlag(t) }} {{ langCode(t) }}{{ t.default ? " •" : "" }}
             </option>
           </select>
 
@@ -508,7 +529,7 @@ function fmt(t) {
 
     <div
       v-if="subsOpen"
-      class="absolute right-4 top-12 z-40 flex max-h-[70%] w-80 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/60 shadow-2xl shadow-black/60 backdrop-blur-xl"
+      class="nice-scroll absolute right-4 top-20 z-40 flex max-h-[65%] w-80 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/60 shadow-2xl shadow-black/60 backdrop-blur-xl"
     >
       <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
         <span class="text-sm font-semibold text-slate-100">Subtitles</span>

@@ -112,7 +112,7 @@ watch(
 
     <main
       class="relative h-full w-full"
-      :class="route.path === '/player' ? '' : 'pt-14'"
+      :class="route.path === '/player' ? 'bg-transparent' : 'bg-[#0b0f17] pt-14'"
     >
       <RouterView />
     </main>
