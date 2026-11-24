@@ -1,18 +1,38 @@
 # Player Integration
 
-Status: strategy locked (TD-002); implementation M3; this file records the evaluation outcome and constraints.
+Status: M3 ACCEPTED with tauri-plugin-libmpv (Strategy A). Full controls land in Phase 4.
 
-## Plan
+## Evaluation outcome
 
-1. Evaluate `tauri-plugin-libmpv` (MPL-2.0, v0.3.2): embed via transparent window; requires libmpv-2.dll (LGPL, zhongfly mpv-dev-lgpl build) + libmpv-wrapper.dll bundled under `src-tauri/lib/`.
-2. Verification matrix (M3): render in-window, play/pause, seek, volume, fullscreen, resize, DPI change, hwdec active (`hwdec-current`), audio track selection, external SRT.
-3. Fallback if quality bar fails: custom child-HWND embed (`wid`) via windows-rs + libmpv C API.
+`tauri-plugin-libmpv` v0.3.2 (MPL-2.0) adopted. Verified working on this machine (2026-11-24):
 
-## Licensing
+| Criterion | Result |
+|---|---|
+| Plugin loads libmpv-wrapper.dll + libmpv-2.dll | OK (auto-copied to target dir in dev) |
+| mpv instance in main window (wid mode, transparent webview) | OK |
+| Playback | OK — 10 s 1080p H.264 clip played 0→9.98 s smoothly (probe telemetry 1 Hz) |
+| Hardware decoding | OK — `hwdec-current = d3d11va` (auto-safe) |
+| Codec/container detection | OK — `video-format = h264` |
+| EOF behavior (keep-open) | OK — holds last frame |
+| Instance lifecycle (init/destroy/HMR reload) | OK — clean destroy logged |
+| Capability gating | `libmpv:default` added to capabilities/default.json |
 
-- libmpv-2.dll: LGPL build → dynamically linked, replaceable; notices shipped with installer (Phase 13).
-- Plugin: MPL-2.0 file-level copyleft; if modified, changes to plugin files stay open; vendoring allowed.
+## Configuration shipped
 
-## Findings
+- Window: `transparent: true`; player surfaces leave transparency so the mpv layer shows through; all non-player UI paints opaque backgrounds.
+- mpv initial options: `vo=gpu-next`, `hwdec=auto-safe`, `keep-open=yes`, `force-window=yes`.
+- DLLs bundled via `bundle.resources: ["lib/**/*"]`: libmpv-2.dll = zhongfly LGPL build (2026-11-23), libmpv-wrapper.dll = plugin's wrapper.
+- Frontend wrapper: `src/composables/usePlayer.js` (init/loadfile/pause/seek/volume/observe + dev telemetry).
 
-(to be filled at M3 completion)
+## Positioning
+
+Plugin exposes `set_video_margin_ratio` for insetting the video region; used by Phase 4/5 layouts if the player is embedded rather than full-window.
+
+## Manual QA items (deferred to Phase 4 with real controls)
+
+- Fullscreen transition, window resize during playback, DPI change mid-play, multi-display moves.
+- External SRT (sub-add), audio track (aid), playback speed (speed property), resume (start property).
+
+## Fallback status
+
+Strategy B (custom child-HWND embed) not needed; retained as documented contingency in TECHNICAL_DECISIONS.md TD-002.

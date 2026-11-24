@@ -4,6 +4,22 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — M3 complete (player ACCEPTED)
+
+- tauri-plugin-libmpv v0.3.2 integrated (npm `tauri-plugin-libmpv-api` + crate + `libmpv:default` capability).
+- Native DLLs installed via `npx tauri-plugin-libmpv-api setup-lib` (LGPL libmpv-2.dll 2026-11-23 build + libmpv-wrapper.dll) → src-tauri/lib/, bundled as resources.
+- Window set transparent; `src/composables/usePlayer.js` + `src/pages/PlayerPage.vue` built (init/loadfile/pause/seek/volume/observe).
+- `dev_log` command added (frontend diagnostics channel).
+
+**Tests executed:**
+- Live playback verification (automated probes, 1 Hz): fresh boot → loadfile Big_Buck_Bunny_1080_10s.mp4 → time-pos advanced 0.73→9.98 (exact 1 s/s), `hwdec=d3d11va`, `fmt=h264`, EOF hold at 9.98 with keep-open — PASSED.
+- Instance lifecycle: HMR reload destroyed + re-created instance cleanly — PASSED.
+- Capability enforcement: mpv init was correctly blocked before adding `libmpv:default`; allowed after — PASSED (confirms Tauri permission model active).
+
+**Blockers:** none.
+
+---
+
 ## 2026-11-24 — M1 + M2 complete
 
 **M1 (librqbit engine):**

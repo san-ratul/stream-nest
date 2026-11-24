@@ -10,11 +10,21 @@ fn health() -> String {
     "streamnest-ok".to_string()
 }
 
+#[tauri::command]
+fn dev_log(message: String, level: Option<String>) {
+    match level.as_deref() {
+        Some("warn") => log::warn!("[frontend] {message}"),
+        Some("error") => log::error!("[frontend] {message}"),
+        _ => log::info!("[frontend] {message}"),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_libmpv::init())
         .setup(|app| {
             let handle = app.handle().clone();
             app.manage(engine::EngineState::new());
@@ -23,6 +33,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             health,
+            dev_log,
             commands::engine_status,
             commands::torrent_add_uri,
             commands::torrent_add_file_base64,
