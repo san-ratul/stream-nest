@@ -45,6 +45,8 @@ const controlsRef = ref(null);
 const subsOpen = ref(false);
 const aspectOpen = ref(false);
 const audioOpen = ref(false);
+const chromeVisible = ref(true);
+let lastMouseMove = Date.now();
 let probeTimer = null;
 let lastTime = null;
 let stallSeconds = 0;
@@ -181,6 +183,11 @@ async function saveProgress(final = false) {
   } catch {
     // progress persistence is best-effort during playback
   }
+}
+
+function onMouseMove() {
+  lastMouseMove = Date.now();
+  chromeVisible.value = true;
 }
 
 function onKeydown(e) {
@@ -385,6 +392,19 @@ onMounted(async () => {
       playerState.buffering = false;
     }
     lastTime = t;
+    const idleMs = Date.now() - lastMouseMove;
+    const anyOpen = audioOpen.value || subsOpen.value || aspectOpen.value;
+    if (
+      !playerState.paused &&
+      !scrubbing.value &&
+      !anyOpen &&
+      playerStore.hasVideo &&
+      idleMs > 3000
+    ) {
+      chromeVisible.value = false;
+    } else {
+      chromeVisible.value = true;
+    }
     if (playerState.duration != null && playerState.duration > 0) await maybeResume();
     await saveProgress(false);
   }, 1000);
@@ -441,15 +461,26 @@ function fmt(t) {
     </div>
   </div>
 
-  <div v-else ref="surfaceRef" class="relative flex h-full flex-col justify-end" data-player-surface>
+  <div
+    v-else
+    ref="surfaceRef"
+    class="relative flex h-full flex-col justify-end"
+    :class="chromeVisible ? '' : 'cursor-none'"
+    data-player-surface
+    @mousemove="onMouseMove"
+    @mousedown="onMouseMove"
+  >
     <div
       class="absolute inset-0 z-0 bg-[#0b0f17] transition-opacity duration-300"
       :class="playerStore.hasVideo ? 'opacity-0' : 'opacity-100'"
     ></div>
 
-    <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/85 via-black/55 to-transparent pl-[4.25rem] pr-5 pb-8 pt-3">
-      <div class="flex items-center gap-3 text-xs text-slate-200 drop-shadow">
-        <span class="max-w-[30%] truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
+    <div
+      class="absolute inset-x-0 top-0 z-20 transition-all duration-300"
+      :class="chromeVisible ? 'opacity-100 translate-y-0' : 'pointer-events-none -translate-y-4 opacity-0'"
+    >
+      <div class="flex items-center gap-3 bg-gradient-to-b from-black/85 via-black/55 to-transparent pb-8 pl-[4.25rem] pr-4 pt-2.5">
+        <span class="min-w-0 flex-1 truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
         <span class="rounded bg-white/10 px-1.5 py-0.5">{{ playerState.hwdec === "no" ? "sw decode" : `hwdec ${playerState.hwdec ?? "?"}` }}</span>
         <span class="rounded bg-white/10 px-1.5 py-0.5">{{ (playerState.videoFormat ?? "?").toUpperCase() }}</span>
         <span v-if="resumeNote" class="rounded bg-sky-500/30 px-2 py-0.5 text-sky-200">{{ resumeNote }}</span>
@@ -464,70 +495,68 @@ function fmt(t) {
           buffered to {{ fmt(playerState.cacheTime) }}
         </span>
         <span v-if="playerState.error" class="text-red-300">{{ playerState.error }}</span>
-      </div>
-    </div>
 
-    <div class="absolute right-4 top-12 z-30 flex items-center gap-2">
-      <div class="relative">
-        <button
-          class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 shadow backdrop-blur hover:bg-white/10"
-          title="Audio language"
-          @click="audioOpen = !audioOpen; subsOpen = false"
-        >
-          {{ selectedAudio ? langCode(selectedAudio) : "AUD" }} ▾
-        </button>
-        <div
-          v-if="audioOpen"
-          class="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/60 backdrop-blur-xl"
-        >
+        <div class="relative">
           <button
-            v-for="t in audioTracks"
-            :key="t.id"
-            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition"
-            :class="selectedAudio?.id === t.id ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
-            @click="pickAudio(String(t.id))"
+            class="rounded-lg border border-white/10 bg-[#111827]/90 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 shadow backdrop-blur transition hover:bg-white/10"
+            title="Audio language"
+            @click="audioOpen = !audioOpen; subsOpen = false"
           >
-            <span class="inline-flex h-5 min-w-7 items-center justify-center rounded bg-sky-500/20 px-1 text-[10px] font-bold text-sky-200">
-              {{ langCode(t) }}
-            </span>
-            <span class="truncate">
-              {{ t.title && t.title.toLowerCase() !== (t.lang ?? "").toLowerCase() ? t.title : (t.lang ? t.lang.toUpperCase() : `track ${t.id}`) }}{{ t.default ? " •" : "" }}
-            </span>
+            {{ selectedAudio ? langCode(selectedAudio) : "AUD" }} ▾
           </button>
+          <div
+            v-if="audioOpen"
+            class="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#111827]/90 shadow-2xl shadow-black/60 backdrop-blur-xl"
+          >
+            <button
+              v-for="t in audioTracks"
+              :key="t.id"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition"
+              :class="selectedAudio?.id === t.id ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
+              @click="pickAudio(String(t.id))"
+            >
+              <span class="inline-flex h-5 min-w-7 items-center justify-center rounded bg-sky-500/20 px-1 text-[10px] font-bold text-sky-200">
+                {{ langCode(t) }}
+              </span>
+              <span class="truncate">
+                {{ t.title && t.title.toLowerCase() !== (t.lang ?? "").toLowerCase() ? t.title : (t.lang ? t.lang.toUpperCase() : `track ${t.id}`) }}{{ t.default ? " •" : "" }}
+              </span>
+            </button>
+          </div>
         </div>
+
+        <button
+          class="rounded-lg border border-white/10 bg-[#111827]/90 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 shadow backdrop-blur transition hover:bg-white/10"
+          title="Subtitles"
+          @click="subsOpen = !subsOpen; audioOpen = false"
+        >
+          CC
+          <span v-if="selectedSubId !== 'off'" class="text-sky-300">•</span>
+        </button>
+
+        <button
+          v-if="playerState.videoFormat"
+          class="rounded-lg bg-amber-500/80 px-3 py-1 text-xs font-medium text-slate-950 shadow transition hover:bg-amber-400"
+          title="If video stays black, reinitialize with software decode and 8-bit output"
+          @click="forceSoftwareDecode"
+        >
+          fix video
+        </button>
+        <button
+          class="rounded-lg bg-white/15 px-3 py-1 text-xs text-slate-100 shadow backdrop-blur transition hover:bg-white/25"
+          :title="fullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)'"
+          @click="toggleFullscreen"
+        >
+          {{ fullscreen ? "Exit fullscreen" : "Fullscreen" }}
+        </button>
+        <button
+          class="flex h-7 items-center justify-center rounded-lg border border-red-400/40 bg-red-600/70 px-2.5 text-xs text-white shadow backdrop-blur transition hover:bg-red-500/90"
+          title="Close player"
+          @click="$router.back()"
+        >
+          ✕
+        </button>
       </div>
-
-      <button
-        class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 shadow backdrop-blur hover:bg-white/10"
-        title="Subtitles"
-        @click="subsOpen = !subsOpen; audioOpen = false"
-      >
-        CC
-        <span v-if="selectedSubId !== 'off'" class="text-sky-300">•</span>
-      </button>
-
-      <button
-        v-if="playerState.videoFormat"
-        class="rounded-lg bg-amber-500/80 px-3 py-1 text-xs font-medium text-slate-950 shadow hover:bg-amber-400"
-        title="If video stays black, reinitialize with software decode and 8-bit output"
-        @click="forceSoftwareDecode"
-      >
-        fix video
-      </button>
-      <button
-        class="rounded-lg bg-white/10 px-3 py-1 text-xs text-slate-100 shadow backdrop-blur hover:bg-white/20"
-        :title="fullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)'"
-        @click="toggleFullscreen"
-      >
-        {{ fullscreen ? "Exit fullscreen" : "Fullscreen" }}
-      </button>
-      <button
-        class="flex h-9 items-center justify-center rounded-lg border border-red-400/40 bg-red-600/70 px-2.5 text-xs text-white shadow backdrop-blur transition hover:bg-red-500/90"
-        title="Close player"
-        @click="$router.back()"
-      >
-        ✕
-      </button>
     </div>
 
     <div
@@ -569,7 +598,8 @@ function fmt(t) {
 
     <div
       ref="controlsRef"
-      class="absolute inset-x-4 bottom-3 z-10 rounded-2xl border border-white/10 bg-[#111827]/85 px-5 pb-3.5 pt-2 shadow-2xl shadow-black/60 backdrop-blur-xl"
+      class="absolute inset-x-4 bottom-3 z-10 rounded-2xl border border-white/10 bg-[#111827]/85 px-5 pb-3.5 pt-2 shadow-2xl shadow-black/60 backdrop-blur-xl transition-all duration-300"
+      :class="chromeVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-4 opacity-0'"
       data-player-controls
     >
       <div class="group relative flex h-4 cursor-pointer items-center">
