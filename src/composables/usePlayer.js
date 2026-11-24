@@ -133,6 +133,12 @@ export async function playerDestroy() {
   }
   if (playerState.initialized) {
     try {
+      // stop playback first so decode/present threads wind down before teardown
+      await command("stop", []);
+    } catch (err) {
+      await log(`mpv stop before destroy failed: ${err}`, "warn");
+    }
+    try {
       await destroy();
     } catch (err) {
       await log(`mpv destroy failed: ${err}`, "warn");
@@ -237,8 +243,13 @@ export async function playerRenderDiagnostics() {
 
 export async function playerGetTrackList() {
   try {
-    const v = await getProperty("track-list", "node");
-    return Array.isArray(v) ? v : [];
+    // NEVER use the "node" format through the wrapper: its deserializer
+    // segfaults (0xc0000005). String format is safe; parse defensively.
+    const v = await getProperty("track-list", "string");
+    if (!v || typeof v !== "string") return [];
+    const cleaned = v.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":');
+    const parsed = JSON.parse(cleaned);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
