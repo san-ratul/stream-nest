@@ -41,6 +41,8 @@ const fixApplied = ref(null);
 const scrubbing = ref(false);
 const scrubValue = ref(0);
 const surfaceRef = ref(null);
+const controlsRef = ref(null);
+const subsOpen = ref(false);
 let probeTimer = null;
 let lastTime = null;
 let stallSeconds = 0;
@@ -55,6 +57,11 @@ const appWindow = getCurrentWebviewWindow();
 
 const audioTracks = computed(() => tracks.value.filter((t) => t.type === "audio"));
 const subtitleTracks = computed(() => tracks.value.filter((t) => t.type === "sub"));
+const selectedAudioId = computed(() => audioTracks.value.find((t) => t.selected)?.id ?? "");
+const selectedSubId = computed(() => {
+  const s = subtitleTracks.value.find((t) => t.selected);
+  return s ? String(s.id) : "off";
+});
 
 const sourceTorrent = computed(
   () =>
@@ -81,11 +88,28 @@ const ASPECTS = [
   { label: "2.35:1", value: "2.35" },
 ];
 
+function langCode(t) {
+  const raw = t?.lang || t?.title || "";
+  const code = String(raw).trim();
+  if (!code) return t?.external ? "EXT" : "UND";
+  return code.toUpperCase().slice(0, 3);
+}
+
+function trackLabel(t) {
+  const base = langCode(t);
+  const extra = [];
+  if (t?.title && t.lang && t.title.toLowerCase() !== t.lang.toLowerCase()) {
+    extra.push(t.title);
+  }
+  if (t?.external) extra.push("external");
+  return extra.length ? `${base} · ${extra.join(" · ")}` : base;
+}
+
 function currentMediaKey() {
   return mediaKey(playerStore.infoHash, playerStore.fileId);
 }
 
-async function updateMargins() {
+async function updateVideoGeometry() {
   const el = surfaceRef.value;
   if (!el || !playerState.initialized) return;
   await nextTick();
@@ -103,6 +127,17 @@ async function updateMargins() {
     await playerSetVideoMarginRatio(ratio);
   } catch {
     // margins are cosmetic; retry on next resize
+  }
+  if (controlsRef.value) {
+    const controlsHeight = controlsRef.value.offsetHeight;
+    const subPos = Math.round(
+      Math.min(95, Math.max(50, ((rect.height - controlsHeight) / rect.height) * 100))
+    );
+    try {
+      await playerSetProperty("sub-pos", subPos);
+    } catch {
+      // subtitle positioning is cosmetic
+    }
   }
 }
 
@@ -143,6 +178,10 @@ async function saveProgress(final = false) {
 function onKeydown(e) {
   const tag = document.activeElement?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  if (e.key === "Escape" && subsOpen.value) {
+    subsOpen.value = false;
+    return;
+  }
   switch (e.key) {
     case " ":
       e.preventDefault();
@@ -182,7 +221,7 @@ async function toggleFullscreen() {
   try {
     fullscreen.value = !fullscreen.value;
     await appWindow.setFullscreen(fullscreen.value);
-    setTimeout(updateMargins, 300);
+    setTimeout(updateVideoGeometry, 300);
   } catch (err) {
     controlError.value = `fullscreen failed: ${err}`;
   }
@@ -208,6 +247,7 @@ async function onSubtitleFile() {
       contentsBase64: btoa(binary),
     });
     await playerAddExternalSubtitle(path, file.name);
+    await refreshTracks();
   } catch (err) {
     controlError.value = String(err?.message ?? err);
   }
@@ -254,11 +294,20 @@ async function forceSoftwareDecode() {
       await playerLoad(playerStore.src);
       if (pos > 2) await seekWhenReady(pos);
     }
-    await updateMargins();
+    await updateVideoGeometry();
     setTimeout(() => (fixApplied.value = null), 4000);
   } catch (err) {
     controlError.value = String(err?.message ?? err);
   }
+}
+
+function pickAudio(id) {
+  if (id !== "") playerSetAudioTrack(id).catch((err) => (controlError.value = String(err)));
+}
+
+function pickSubtitle(id) {
+  const value = id === "off" ? "no" : id;
+  playerSetSubtitleTrack(value).catch((err) => (controlError.value = String(err)));
 }
 
 onMounted(async () => {
@@ -268,15 +317,15 @@ onMounted(async () => {
     await playerLoad(playerStore.src);
   }
   await refreshTracks();
-  await updateMargins();
+  await updateVideoGeometry();
   if (surfaceRef.value && typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(() => {
       clearTimeout(marginsTimer);
-      marginsTimer = setTimeout(updateMargins, 120);
+      marginsTimer = setTimeout(updateVideoGeometry, 120);
     });
     resizeObserver.observe(surfaceRef.value);
   }
-  window.addEventListener("resize", updateMargins);
+  window.addEventListener("resize", updateVideoGeometry);
   if (currentMediaKey()) {
     invoke("library_add", {
       mediaKey: currentMediaKey(),
@@ -309,9 +358,6 @@ onMounted(async () => {
       message: `DIAG vo=${diag?.currentVo} configured=${diag?.voConfigured} margins L=${m.left?.toFixed(3)} R=${m.right?.toFixed(3)} T=${m.top?.toFixed(3)} B=${m.bottom?.toFixed(3)} download=${dl}`,
     }).catch(() => {});
     const t = playerState.timePos;
-    invoke("dev_log", {
-      message: `TRACKS audio=${audioTracks.value.length} subs=${subtitleTracks.value.length} total=${tracks.value.length}`,
-    }).catch(() => {});
     if (!playerState.paused && playerState.duration != null) {
       if (t != null && lastTime != null && Math.abs(t - lastTime) > 0.01) {
         stallSeconds = 0;
@@ -334,7 +380,7 @@ onMounted(async () => {
 onUnmounted(async () => {
   clearInterval(probeTimer);
   window.removeEventListener("keydown", onKeydown);
-  window.removeEventListener("resize", updateMargins);
+  window.removeEventListener("resize", updateVideoGeometry);
   if (resizeObserver) resizeObserver.disconnect();
   await saveProgress(true);
   if (fullscreen.value) appWindow.setFullscreen(false).catch(() => {});
@@ -356,14 +402,6 @@ function setSpeed(rate) {
 function setAspect(value) {
   aspect.value = value;
   playerSetAspect(value).catch((err) => (controlError.value = String(err)));
-}
-
-function selectAudio(id) {
-  playerSetAudioTrack(id).catch((err) => (controlError.value = String(err)));
-}
-
-function selectSubtitle(id) {
-  playerSetSubtitleTrack(id === "off" ? "no" : id).catch((err) => (controlError.value = String(err)));
 }
 
 function fmt(t) {
@@ -394,16 +432,16 @@ function fmt(t) {
       class="absolute inset-0 z-0 bg-[#0b0f17] transition-opacity duration-300"
       :class="playerStore.hasVideo ? 'opacity-0' : 'opacity-100'"
     ></div>
+
     <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-5 pb-8 pt-3">
-      <div class="flex items-center gap-4 text-xs text-slate-200 drop-shadow">
-        <span class="max-w-[40%] truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
+      <div class="flex items-center gap-3 text-xs text-slate-200 drop-shadow">
+        <span class="max-w-[30%] truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
         <span class="rounded bg-white/10 px-1.5 py-0.5">{{ playerState.hwdec === "no" ? "sw decode" : `hwdec ${playerState.hwdec ?? "?"}` }}</span>
         <span class="rounded bg-white/10 px-1.5 py-0.5">{{ (playerState.videoFormat ?? "?").toUpperCase() }}</span>
         <span v-if="resumeNote" class="rounded bg-sky-500/30 px-2 py-0.5 text-sky-200">{{ resumeNote }}</span>
         <span v-if="speed !== 1" class="rounded bg-violet-500/30 px-1.5 text-violet-200">{{ speed }}×</span>
         <span v-if="playerState.buffering" class="animate-pulse rounded bg-amber-500/30 px-2 py-0.5 text-amber-200">
-          buffering…
-          <span v-if="downloadSpeed"> ({{ fmtSpeed(downloadSpeed) }})</span>
+          buffering… <span v-if="downloadSpeed">({{ fmtSpeed(downloadSpeed) }})</span>
         </span>
         <span
           v-else-if="playerState.cacheTime != null && playerState.timePos != null && playerState.cacheTime > playerState.timePos + 2"
@@ -412,10 +450,33 @@ function fmt(t) {
           buffered to {{ fmt(playerState.cacheTime) }}
         </span>
         <span v-if="playerState.error" class="text-red-300">{{ playerState.error }}</span>
+
+        <div class="ml-auto flex items-center gap-2">
+          <select
+            v-if="audioTracks.length"
+            class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-400"
+            :value="selectedAudioId"
+            title="Audio language"
+            @change="pickAudio($event.target.value)"
+          >
+            <option v-for="t in audioTracks" :key="t.id" :value="t.id">
+              {{ langCode(t) }}{{ t.default ? " •" : "" }}
+            </option>
+          </select>
+
+          <button
+            class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 hover:bg-white/10"
+            title="Subtitles"
+            @click="subsOpen = !subsOpen"
+          >
+            CC
+            <span v-if="selectedSubId !== 'off'" class="text-sky-300">•</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <div class="absolute right-4 top-3 z-20 flex gap-2">
+    <div class="absolute right-4 top-12 z-30 flex gap-2">
       <button
         v-if="playerState.videoFormat"
         class="rounded-lg bg-amber-500/80 px-3 py-1 text-xs font-medium text-slate-950 shadow hover:bg-amber-400"
@@ -441,6 +502,44 @@ function fmt(t) {
     </div>
 
     <div
+      v-if="subsOpen"
+      class="absolute right-4 top-12 z-40 flex max-h-[70%] w-80 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/60 shadow-2xl shadow-black/60 backdrop-blur-xl"
+    >
+      <div class="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <span class="text-sm font-semibold text-slate-100">Subtitles</span>
+        <button class="text-xs text-slate-400 hover:text-slate-200" @click="subsOpen = false">✕</button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-2">
+        <button
+          class="mb-1 w-full rounded-lg px-3 py-2 text-left text-sm transition"
+          :class="selectedSubId === 'off' ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
+          @click="pickSubtitle('off')"
+        >
+          Off
+        </button>
+        <button
+          v-for="t in subtitleTracks"
+          :key="t.id"
+          class="mb-1 w-full truncate rounded-lg px-3 py-2 text-left text-sm transition"
+          :class="selectedSubId === String(t.id) ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
+          @click="pickSubtitle(String(t.id))"
+        >
+          {{ trackLabel(t) }}
+        </button>
+        <p v-if="!subtitleTracks.length" class="px-3 py-2 text-xs text-slate-400">
+          No subtitle tracks in this file. Load an external one below.
+        </p>
+      </div>
+      <div class="border-t border-white/10 p-2">
+        <label class="flex cursor-pointer items-center justify-center rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-100 hover:bg-white/10">
+          + load external subtitle
+          <input ref="subtitleFile" type="file" accept=".srt,.ass,.vtt,.ssa" class="hidden" @change="onSubtitleFile" />
+        </label>
+      </div>
+    </div>
+
+    <div
+      ref="controlsRef"
       class="absolute inset-x-4 bottom-3 z-10 rounded-2xl border border-white/10 bg-black/35 px-5 pb-3.5 pt-2 shadow-2xl shadow-black/60 backdrop-blur-xl"
       data-player-controls
     >
@@ -523,33 +622,6 @@ function fmt(t) {
         >
           <option v-for="a in ASPECTS" :key="a.value" :value="a.value">aspect: {{ a.label }}</option>
         </select>
-
-        <select
-          v-if="audioTracks.length"
-          class="max-w-[150px] rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"
-          @change="selectAudio($event.target.value)"
-        >
-          <option value="" disabled selected>audio…</option>
-          <option v-for="t in audioTracks" :key="t.id" :value="t.id">
-            {{ t.title || t.lang || `audio ${t.id}` }}{{ t.default ? " ✓" : "" }}
-          </option>
-        </select>
-
-        <select
-          class="max-w-[150px] rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"
-          @change="selectSubtitle($event.target.value); $event.target.value = ''"
-        >
-          <option value="" disabled selected>subtitles…</option>
-          <option value="off">off</option>
-          <option v-for="t in subtitleTracks" :key="t.id" :value="t.id">
-            {{ t.title || t.lang || `sub ${t.id}` }}{{ t.external ? " (ext)" : "" }}
-          </option>
-        </select>
-
-        <label class="cursor-pointer rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-100 hover:bg-white/10">
-          + load SRT
-          <input ref="subtitleFile" type="file" accept=".srt,.ass,.vtt,.ssa" class="hidden" @change="onSubtitleFile" />
-        </label>
 
         <div class="ml-auto flex items-center gap-2">
           <span class="text-xs text-slate-400">Vol</span>
