@@ -547,18 +547,24 @@ function fmt(t) {
 
         <div class="ml-auto flex items-center gap-2">
           <span class="text-xs text-slate-400">Vol</span>
-          <input
-            type="range"
-            class="h-4 w-24 cursor-pointer appearance-none bg-transparent
-                   [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-white/25
-                   [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none
-                   [&::-webkit-slider-thumb]:-mt-[3px] [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white
-                   [&::-webkit-slider-thumb]:shadow"
-            min="0"
-            max="130"
-            :value="volume"
-            @input="onVolume"
-          />
+          <div class="relative flex h-4 w-24 items-center">
+            <div class="absolute inset-x-0 h-1.5 rounded-full bg-white/30"></div>
+            <div
+              class="absolute left-0 h-1.5 rounded-full bg-sky-400"
+              :style="{ width: `${(volume / 130) * 100}%` }"
+            ></div>
+            <input
+              type="range"
+              class="relative z-10 h-4 w-full cursor-pointer appearance-none bg-transparent
+                     [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none
+                     [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white
+                     [&::-webkit-slider-thumb]:shadow"
+              min="0"
+              max="130"
+              :value="volume"
+              @input="onVolume"
+            />
+          </div>
         </div>
       </div>
       <p v-if="fixApplied || controlError" class="mt-1 text-xs" :class="controlError ? 'text-red-300' : 'text-emerald-300'">
