@@ -606,4 +606,117 @@ mod tests {
         let _ = std::fs::remove_dir_all(seed_dir);
         let _ = std::fs::remove_dir_all(down_dir);
     }
+
+    /// Real end-to-end streaming test against the local deterministic seeder.
+    /// Start it first: cargo run --bin seeder E:\streamnest\.testmedia 6900
+    #[tokio::test]
+    #[ignore = "requires the local seeder: cargo run --bin seeder <media-dir> 6900"]
+    async fn live_streaming_fixture_progressive_range() {
+        let media_dir =
+            std::env::var("STREAMNEST_TEST_MEDIA").unwrap_or_else(|_| "E:\\streamnest\\.testmedia".to_string());
+        let torrent_path = std::path::Path::new(&media_dir)
+            .join("torrents")
+            .join("Sintel.2010.1080p.mkv.torrent");
+        let torrent_bytes = std::fs::read(&torrent_path)
+            .unwrap_or_else(|e| panic!("fixture torrent missing at {}: {e}", torrent_path.display()));
+
+        let down_dir = std::env::temp_dir().join(format!("sn-stream-e2e-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&down_dir);
+        std::fs::create_dir_all(&down_dir).unwrap();
+
+        let shared = crate::engine::build_session(down_dir.clone()).await.expect("engine");
+        let db = crate::storage::Db::open_in_memory().unwrap();
+
+        let prepared = prepare_core(
+            &shared,
+            &db,
+            SourceInput::TorrentBytes {
+                bytes: torrent_bytes,
+                peers: vec!["127.0.0.1:6900".to_string()],
+            },
+            None,
+        )
+        .await
+        .expect("prepare with live seeder");
+        assert_eq!(prepared.videos.len(), 1, "single Sintel video file");
+        assert!(
+            prepared.videos[0].name.to_lowercase().contains("sintel"),
+            "expected the Sintel file, got {}",
+            prepared.videos[0].name
+        );
+
+        // Authenticated stream URL, same construction as the stream_url command.
+        let url = format!(
+            "http://127.0.0.1:{}/{}/{}/{}",
+            shared.streaming.port,
+            shared.streaming.token,
+            prepared.info_hash,
+            prepared.videos[0].file_index
+        );
+
+        let client = reqwest::Client::new();
+
+        // 1) Progressive first chunk: 206 with bounded content.
+        let resp = client
+            .get(&url)
+            .header("Range", "bytes=0-1023")
+            .header("Host", format!("127.0.0.1:{}", shared.streaming.port))
+            .timeout(std::time::Duration::from_secs(60))
+            .send()
+            .await
+            .expect("range request");
+        assert_eq!(resp.status(), 206, "partial content expected");
+        assert_eq!(
+            resp.headers().get("content-length").and_then(|v| v.to_str().ok()),
+            Some("1024"),
+            "bounded content-length"
+        );
+        let body = resp.bytes().await.expect("body");
+        assert_eq!(body.len(), 1024);
+        log::info!("streaming e2e: first 1 KiB served progressively");
+
+        // 2) Seek into an incomplete region (near EOF): still 206.
+        let total: u64 = prepared.videos[0].size_bytes;
+        let tail = total.saturating_sub(1024);
+        let resp = client
+            .get(&url)
+            .header("Range", format!("bytes={tail}-"))
+            .header("Host", format!("127.0.0.1:{}", shared.streaming.port))
+            .timeout(std::time::Duration::from_secs(120))
+            .send()
+            .await
+            .expect("tail range request");
+        assert_eq!(resp.status(), 206, "seek into incomplete region must still serve 206");
+        let body = resp.bytes().await.expect("tail body");
+        assert_eq!(body.len() as u64, total - tail, "tail length correct");
+        log::info!("streaming e2e: random-seek tail served ({} bytes)", body.len());
+
+        // 3) Auth: missing token is rejected.
+        let bad = format!(
+            "http://127.0.0.1:{}/wrongtoken/{}/{}",
+            shared.streaming.port,
+            prepared.info_hash,
+            prepared.videos[0].file_index
+        );
+        let resp = client
+            .get(&bad)
+            .header("Host", format!("127.0.0.1:{}", shared.streaming.port))
+            .send()
+            .await
+            .expect("bad token request");
+        assert!(
+            resp.status() == reqwest::StatusCode::NOT_FOUND || resp.status() == reqwest::StatusCode::FORBIDDEN,
+            "wrong token must be rejected, got {}",
+            resp.status()
+        );
+
+        // Registry lifecycle around the streamed session.
+        let registry = PlaybackRegistry::default();
+        registry.begin("tmdb:movie:45745".to_string(), prepared.info_hash.clone(), 0, "fixture".to_string());
+        assert_eq!(registry.active().len(), 1);
+        assert!(registry.end("tmdb:movie:45745"));
+
+        let _ = shared.api.api_torrent_action_delete(librqbit::api::TorrentIdOrHash::parse(&prepared.info_hash).unwrap()).await;
+        let _ = std::fs::remove_dir_all(down_dir);
+    }
 }

@@ -41,6 +41,17 @@ Status legend: [ ] pending · [~] in progress · [x] complete · [!] blocked
 - [x] Settings sync panel: status, progress, cancel, scope (pages), clear catalog (personal data kept)
 - [ ] Future: in-app playback via additional rights-verified sources; remote TMDB search as opt-in
 
+## Phase 2B — End-to-End Streaming (authorized sources) — [x] IMPLEMENTED (same feature branch)
+
+- [x] AuthorizedSource extension: official torrents (Blender CC-BY, verified btih) + dev fixtures
+- [x] Playback pipeline: add/reuse torrent, metadata wait, video classification, only_files for fresh packs
+- [x] Episode matching (S01E01/S1E1/1x01, confidence + ambiguity → explicit choice)
+- [x] libmpv playback via existing streaming server; tmdbKey history context
+- [x] Continue Watching: posters, episode tags, remaining time, resume via details re-verification
+- [x] Player: torrent truth chip (1 Hz broadcast), Next episode action, playback_end cleanup
+- [x] 78 automated tests incl. deterministic in-process pipeline test
+- [ ] Future: authorized TV sources; more rights-verified providers
+
 ## Benchmark targets vs measured (reference: i7-14700K / 31.8 GB / Win 11 26300)
 
 - First frame: target ≤ ~15 s well-seeded → measured 276–374 ms (1.1 GB @ 3 MB/s throttle) — PASS
