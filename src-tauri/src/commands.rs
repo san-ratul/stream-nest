@@ -366,26 +366,37 @@ pub fn dev_read_test_torrent(name: String) -> CommandResult<String> {
 const SUBTITLE_EXTS: [&str; 4] = ["srt", "ass", "vtt", "ssa"];
 const SUBTITLE_MAX_BYTES: usize = 2 * 1024 * 1024;
 
+pub fn sanitize_subtitle_name(name: &str) -> Result<String, String> {
+    let safe = std::path::Path::new(name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "invalid subtitle file name".to_string())?;
+    if safe.starts_with('.') {
+        return Err("subtitle file name must not be hidden".to_string());
+    }
+    if safe.chars().any(|c| matches!(c, '/' | '\\' | ':' | '\0')) {
+        return Err("subtitle file name contains path separators".to_string());
+    }
+    let ext = std::path::Path::new(safe)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if !SUBTITLE_EXTS.contains(&ext.as_str()) {
+        return Err(format!(
+            "unsupported subtitle type .{ext} (allowed: srt, ass, vtt, ssa)"
+        ));
+    }
+    Ok(safe.to_string())
+}
+
 #[tauri::command]
 pub fn import_subtitle(
     state: State<'_, EngineState>,
     name: String,
     contents_base64: String,
 ) -> CommandResult<String> {
-    let safe_name = std::path::Path::new(&name)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or_else(|| CommandError::new("invalid subtitle file name"))?;
-    let ext = std::path::Path::new(safe_name)
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase())
-        .unwrap_or_default();
-    if !SUBTITLE_EXTS.contains(&ext.as_str()) {
-        return Err(CommandError::new(format!(
-            "unsupported subtitle type .{ext} (allowed: srt, ass, vtt, ssa)"
-        )));
-    }
+    let safe_name = sanitize_subtitle_name(&name).map_err(CommandError::new)?;
 
     let bytes = general_purpose::STANDARD
         .decode(contents_base64.as_bytes())
@@ -404,4 +415,40 @@ pub fn import_subtitle(
     let path = dir.join(safe_name);
     std::fs::write(&path, &bytes)?;
     Ok(path.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_subtitle_name;
+
+    #[test]
+    fn accepts_plain_srt() {
+        assert_eq!(sanitize_subtitle_name("movie.srt").unwrap(), "movie.srt");
+        assert_eq!(sanitize_subtitle_name("MOVIE.SRT").unwrap(), "MOVIE.SRT");
+    }
+
+    #[test]
+    fn strips_traversal_components() {
+        let sanitized = sanitize_subtitle_name("../../etc/evil.srt").unwrap();
+        assert_eq!(sanitized, "evil.srt");
+        assert!(!sanitized.contains(".."));
+    }
+
+    #[test]
+    fn strips_windows_traversal() {
+        let sanitized = sanitize_subtitle_name("..\\..\\windows\\evil.ass").unwrap();
+        assert_eq!(sanitized, "evil.ass");
+        assert!(!sanitized.contains('\\'));
+    }
+
+    #[test]
+    fn rejects_hidden_files() {
+        assert!(sanitize_subtitle_name(".srt").is_err());
+    }
+
+    #[test]
+    fn rejects_wrong_extension() {
+        assert!(sanitize_subtitle_name("payload.txt").is_err());
+        assert!(sanitize_subtitle_name("noext").is_err());
+    }
 }

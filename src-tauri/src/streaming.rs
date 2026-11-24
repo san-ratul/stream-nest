@@ -146,3 +146,49 @@ async fn stream_file(
 
     Ok((status, resp_headers, body))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_range;
+    use axum::http::StatusCode;
+
+    #[test]
+    fn no_range_header_serves_full_body() {
+        assert_eq!(parse_range(None, 1000).unwrap(), None);
+    }
+
+    #[test]
+    fn open_ended_range_clamps_to_len() {
+        assert_eq!(parse_range(Some("bytes=100-"), 1000).unwrap(), Some((100, 1000)));
+    }
+
+    #[test]
+    fn bounded_range_is_end_exclusive() {
+        assert_eq!(parse_range(Some("bytes=100-199"), 1000).unwrap(), Some((100, 200)));
+    }
+
+    #[test]
+    fn suffix_range_serves_full_body() {
+        assert_eq!(parse_range(Some("bytes=-500"), 1000).unwrap(), None);
+    }
+
+    #[test]
+    fn malformed_prefix_is_416() {
+        assert_eq!(parse_range(Some("chunks=0-10"), 1000), Err(StatusCode::RANGE_NOT_SATISFIABLE));
+    }
+
+    #[test]
+    fn start_beyond_len_is_416() {
+        assert_eq!(parse_range(Some("bytes=1000-"), 1000), Err(StatusCode::RANGE_NOT_SATISFIABLE));
+    }
+
+    #[test]
+    fn end_before_start_is_416() {
+        assert_eq!(parse_range(Some("bytes=50-40"), 1000), Err(StatusCode::RANGE_NOT_SATISFIABLE));
+    }
+
+    #[test]
+    fn oversized_end_is_clamped() {
+        assert_eq!(parse_range(Some("bytes=500-999999"), 1000).unwrap(), Some((500, 1000)));
+    }
+}
