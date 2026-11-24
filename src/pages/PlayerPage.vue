@@ -309,6 +309,9 @@ onMounted(async () => {
       message: `DIAG vo=${diag?.currentVo} configured=${diag?.voConfigured} margins L=${m.left?.toFixed(3)} R=${m.right?.toFixed(3)} T=${m.top?.toFixed(3)} B=${m.bottom?.toFixed(3)} download=${dl}`,
     }).catch(() => {});
     const t = playerState.timePos;
+    invoke("dev_log", {
+      message: `TRACKS audio=${audioTracks.value.length} subs=${subtitleTracks.value.length} total=${tracks.value.length}`,
+    }).catch(() => {});
     if (!playerState.paused && playerState.duration != null) {
       if (t != null && lastTime != null && Math.abs(t - lastTime) > 0.01) {
         stallSeconds = 0;
@@ -437,7 +440,10 @@ function fmt(t) {
       </button>
     </div>
 
-    <div class="relative z-10 bg-gradient-to-t from-black/95 via-black/80 to-black/40 px-5 pb-4 pt-2 backdrop-blur-sm" data-player-controls>
+    <div
+      class="absolute inset-x-4 bottom-3 z-10 rounded-2xl border border-white/10 bg-black/35 px-5 pb-3.5 pt-2 shadow-2xl shadow-black/60 backdrop-blur-xl"
+      data-player-controls
+    >
       <div class="group relative flex h-4 cursor-pointer items-center">
         <div class="absolute inset-x-0 top-1.5 h-1 overflow-hidden rounded-full bg-white/15">
           <div class="h-full rounded-full bg-white/25" :style="{ width: `${bufferedPct}%` }"></div>

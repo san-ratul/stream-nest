@@ -6,6 +6,8 @@ import { hydrateSettings } from "./stores/settings";
 import { restorePlayer } from "./stores/player";
 import "./style.css";
 
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+
 restorePlayer();
 Promise.all([startTorrentStore(), hydrateSettings()]).finally(() => {
   createApp(App).use(router).mount("#app");
