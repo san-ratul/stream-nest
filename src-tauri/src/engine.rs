@@ -3,9 +3,12 @@ use std::{path::PathBuf, sync::Arc};
 use librqbit::{
     Api,
     DhtSessionConfig,
+    ListenerMode,
+    ListenerOptions,
     Session,
     SessionOptions,
     SessionPersistenceConfig,
+    dht::DhtPersistenceConfig,
 };
 use parking_lot::RwLock;
 use tauri::{AppHandle, Emitter, Manager};
@@ -44,6 +47,28 @@ async fn build_session(data_dir: PathBuf) -> anyhow::Result<Arc<EngineShared>> {
     std::fs::create_dir_all(&download_dir)?;
     std::fs::create_dir_all(&session_dir)?;
 
+    let listen = if cfg!(debug_assertions) {
+        Some(ListenerOptions {
+            mode: ListenerMode::TcpOnly,
+            listen_addr: (std::net::Ipv4Addr::LOCALHOST, 0).into(),
+            ..Default::default()
+        })
+    } else {
+        None
+    };
+
+    let dht = if cfg!(debug_assertions) {
+        None
+    } else {
+        Some(DhtSessionConfig {
+            persistence: Some(DhtPersistenceConfig {
+                config_filename: Some(engine_dir.join("dht.json")),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+    };
+
     let session = Session::new_with_opts(
         download_dir.clone(),
         SessionOptions {
@@ -51,7 +76,8 @@ async fn build_session(data_dir: PathBuf) -> anyhow::Result<Arc<EngineShared>> {
                 folder: Some(session_dir),
             }),
             fastresume: true,
-            dht: Some(DhtSessionConfig::default()),
+            listen,
+            dht,
             ..Default::default()
         },
     )

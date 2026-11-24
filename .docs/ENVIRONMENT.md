@@ -46,5 +46,6 @@ Disk: C: 115.9 GB free (toolchain home), E: 18.4 GB free (repository home)
 
 ## Known environment caveats
 
-- E: drive has 18.4 GB free; Rust `target/` debug builds can reach several GB. Monitored; toolchain kept on C: intentionally.
+- E: drive has limited free space; **cargo target dir relocated to `C:\rust-targets\streamnest`** via committed `.cargo/config.toml` (E: filled at 17.4 GB of artifacts on 2026-11-24). Sintel/bbb test media (~1.2 GB) lives in gitignored `.testmedia/` on E:.
 - Shell processes do not inherit the updated user PATH; all cargo invocations use the absolute path `%USERPROFILE%\.cargo\bin\cargo.exe`.
+- `npm run tauri dev` must be launched with `%USERPROFILE%\.cargo\bin` prepended to PATH in the same process.

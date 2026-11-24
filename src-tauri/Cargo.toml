@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "StreamNest - privacy-first desktop media streaming application"
 edition = "2021"
 rust-version = "1.77"
+default-run = "streamnest"
 
 [lib]
 name = "streamnest_lib"

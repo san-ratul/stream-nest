@@ -34,3 +34,12 @@ Format: ID | Date | Decision | Rationale | Evidence | Review trigger
 ## TD-007 | 2026-11-24 | MVP dependency discipline
 
 - M0: tauri + serde + serde_json + log/env_logger only. librqbit added at M1, mpv integration at M3, SQLite (rusqlite vs sqlx — decided at Phase 10 with verification) later. No unnecessary dependencies.
+
+## TD-008 | 2026-11-24 | mpv vo=gpu (not gpu-next); debug network profile
+
+- vo: gpu-next/libplacebo presents black on the embedded foreign HWND (Windows); classic vo=gpu renders correctly in wid mode. Verified visually after user reported sound-only playback.
+- Debug builds: torrent listener binds 127.0.0.1:0 and DHT disabled — deterministic dev runs, no Windows Firewall prompt, no LAN exposure. Release builds: default listeners + persisted DHT (firewall prompt on first run is expected and documented).
+
+## TD-009 | 2026-11-24 | Cargo target dir moved to C:\rust-targets\streamnest
+
+- E: drive (repo home) has ~18 GB free; debug target dir reached 17.4 GB and filled the disk. `.cargo/config.toml` redirects target dir to C: (105 GB free). Committed as project config.

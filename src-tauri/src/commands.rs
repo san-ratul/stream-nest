@@ -20,6 +20,20 @@ use tauri::State;
 
 use crate::engine::{EngineShared, EngineState};
 
+fn parse_peers(peers: Option<Vec<String>>) -> Result<Option<Vec<std::net::SocketAddr>>, String> {
+    let Some(peers) = peers else {
+        return Ok(None);
+    };
+    let mut out = Vec::new();
+    for p in peers {
+        let addr: std::net::SocketAddr = p
+            .parse()
+            .map_err(|_| format!("invalid peer address: {p}"))?;
+        out.push(addr);
+    }
+    Ok(if out.is_empty() { None } else { Some(out) })
+}
+
 #[derive(Serialize)]
 pub struct CommandError {
     pub message: String,
@@ -71,9 +85,13 @@ pub fn engine_status(state: State<'_, EngineState>) -> EngineStatus {
 pub async fn torrent_add_uri(
     state: State<'_, EngineState>,
     uri: String,
+    peers: Option<Vec<String>>,
 ) -> CommandResult<ApiAddTorrentResponse> {
+    let initial_peers =
+        parse_peers(peers).map_err(CommandError::new)?;
     let opts = AddTorrentOptions {
         overwrite: false,
+        initial_peers,
         ..Default::default()
     };
     let shared = shared(&state)?;
@@ -87,12 +105,16 @@ pub async fn torrent_add_uri(
 pub async fn torrent_add_file_base64(
     state: State<'_, EngineState>,
     contents: String,
+    peers: Option<Vec<String>>,
 ) -> CommandResult<ApiAddTorrentResponse> {
     let bytes = general_purpose::STANDARD
         .decode(contents.as_bytes())
         .map_err(|e| CommandError::new(format!("invalid base64 torrent file: {e}")))?;
+    let initial_peers =
+        parse_peers(peers).map_err(CommandError::new)?;
     let opts = AddTorrentOptions {
         overwrite: false,
+        initial_peers,
         ..Default::default()
     };
     let shared = shared(&state)?;
@@ -214,4 +236,19 @@ pub fn stream_url(
         id,
         file_id
     ))
+}
+
+#[cfg(debug_assertions)]
+#[tauri::command]
+pub fn dev_read_test_torrent(name: String) -> CommandResult<String> {
+    let dir = std::env::var("STREAMNEST_TEST_MEDIA")
+        .unwrap_or_else(|_| "E:\\streamnest\\.testmedia".to_string());
+    let path = std::path::Path::new(&dir)
+        .join("torrents")
+        .join(&name);
+    let bytes = std::fs::read(&path).map_err(|e| CommandError::new(format!(
+        "cannot read test torrent {}: {e}",
+        path.display()
+    )))?;
+    Ok(general_purpose::STANDARD.encode(bytes))
 }

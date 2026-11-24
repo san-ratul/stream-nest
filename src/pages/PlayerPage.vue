@@ -13,7 +13,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 
 const props = defineProps({
-  videoPath: { type: String, default: "" },
+  src: { type: String, default: "" },
 });
 
 const volume = ref(100);
@@ -21,12 +21,12 @@ let probeTimer = null;
 
 onMounted(() => {
   playerInit().then(() => {
-    if (props.videoPath) playerLoad(props.videoPath);
+    if (props.src) playerLoad(props.src);
   });
   probeTimer = setInterval(() => {
     playerGetHwdec();
     invoke("dev_log", {
-      message: `probe time=${playerState.timePos} dur=${playerState.duration} hwdec=${playerState.hwdec} fmt=${playerState.videoFormat}`,
+      message: `probe time=${playerState.timePos} dur=${playerState.duration} hwdec=${playerState.hwdec} ff=${playerState.firstFrameMs} seek=${playerState.lastSeekMs}`,
     }).catch(() => {});
   }, 1000);
 });
@@ -59,13 +59,16 @@ function fmt(t) {
     <div class="absolute top-3 left-4 flex gap-4 text-xs text-slate-300 drop-shadow">
       <span>hwdec: {{ playerState.hwdec ?? "?" }}</span>
       <span>codec: {{ playerState.videoFormat ?? "?" }}</span>
+      <span v-if="playerState.firstFrameMs != null" class="text-emerald-300">
+        first-frame: {{ playerState.firstFrameMs }}ms
+      </span>
+      <span v-if="playerState.lastSeekMs != null" class="text-emerald-300">
+        seek: {{ playerState.lastSeekMs }}ms
+      </span>
       <span v-if="playerState.error" class="text-red-400">{{ playerState.error }}</span>
     </div>
 
-    <div
-      class="bg-slate-900/85 px-4 py-3 backdrop-blur-sm"
-      data-player-controls
-    >
+    <div class="bg-slate-900/85 px-4 py-3 backdrop-blur-sm" data-player-controls>
       <input
         type="range"
         class="w-full accent-sky-400"

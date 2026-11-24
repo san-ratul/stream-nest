@@ -1,0 +1,3 @@
+# Build target directory lives on C: — E: lacks space for multi-GB Rust debug artifacts.
+[build]
+target-dir = "C:\\rust-targets\\streamnest"

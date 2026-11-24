@@ -27,10 +27,17 @@ export const playerState = reactive({
   hwdec: null,
   videoFormat: null,
   eof: null,
-  loadedFile: null,
+  loadedSrc: null,
+  firstFrameMs: null,
+  lastSeekMs: null,
 });
 
 let unlisten = null;
+let loadT0 = null;
+let awaitingFirstFrame = false;
+let awaitingSeekResume = false;
+let seekTarget = null;
+let seekT0 = null;
 
 async function log(msg, level) {
   try {
@@ -40,12 +47,31 @@ async function log(msg, level) {
   }
 }
 
+function onTimePos(v) {
+  playerState.timePos = v;
+  if (awaitingFirstFrame && v != null && v > 0 && loadT0 != null) {
+    awaitingFirstFrame = false;
+    playerState.firstFrameMs = Math.round(performance.now() - loadT0);
+    log(`FIRST_FRAME_MS=${playerState.firstFrameMs}`);
+  }
+  if (
+    awaitingSeekResume &&
+    v != null &&
+    seekTarget != null &&
+    Math.abs(v - seekTarget) < 3
+  ) {
+    awaitingSeekResume = false;
+    playerState.lastSeekMs = Math.round(performance.now() - seekT0);
+    log(`SEEK_RESUME_MS=${playerState.lastSeekMs}`);
+  }
+}
+
 export async function playerInit() {
   if (playerState.initialized) return;
   try {
     await init({
       initialOptions: {
-        vo: "gpu-next",
+        vo: "gpu",
         hwdec: "auto-safe",
         "keep-open": "yes",
         "force-window": "yes",
@@ -61,7 +87,7 @@ export async function playerInit() {
           playerState.paused = data;
           break;
         case "time-pos":
-          playerState.timePos = data;
+          onTimePos(data);
           break;
         case "duration":
           playerState.duration = data;
@@ -98,11 +124,15 @@ export async function playerDestroy() {
   }
 }
 
-export async function playerLoad(path) {
-  playerState.loadedFile = path;
-  await command("loadfile", [path]);
+export async function playerLoad(src) {
+  playerState.loadedSrc = src;
+  playerState.firstFrameMs = null;
+  playerState.lastSeekMs = null;
+  loadT0 = performance.now();
+  awaitingFirstFrame = true;
+  await command("loadfile", [src]);
   await setProperty("pause", false);
-  await log(`loadfile ${path}`);
+  await log(`STREAM_START src=${src}`);
 }
 
 export async function playerTogglePause() {
@@ -112,12 +142,11 @@ export async function playerTogglePause() {
 }
 
 export async function playerSeek(seconds) {
+  seekTarget = seconds;
+  seekT0 = performance.now();
+  awaitingSeekResume = true;
   await setProperty("time-pos", seconds);
-}
-
-export async function playerSeekBy(delta) {
-  const current = playerState.timePos ?? 0;
-  await playerSeek(Math.max(0, current + delta));
+  await log(`SEEK_START target=${seconds}`);
 }
 
 export async function playerSetVolume(percent) {

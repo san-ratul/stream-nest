@@ -23,7 +23,7 @@ fn dev_log(message: String, level: Option<String>) {
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_libmpv::init())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -48,7 +48,11 @@ pub fn run() {
             commands::torrent_update_only_files,
             commands::session_stats,
             commands::stream_url,
-        ])
+            #[cfg(debug_assertions)]
+            commands::dev_read_test_torrent,
+        ]);
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

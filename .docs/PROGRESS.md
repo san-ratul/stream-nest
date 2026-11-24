@@ -4,6 +4,27 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — M4 complete (progressive streaming ACCEPTED, video rendering fixed)
+
+**M4 run:** Sintel.2010.1080p.mkv (1.1 GB, 888 s, MKV/H.264) via local throttled seeder (3 MB/s upload) → engine → Range server → libmpv. Full evidence in STREAMING_ENGINE.md.
+
+**Results:** first frame 276–374 ms with download ~6 min remaining (true progressive); deep seeks to 35%/70% stall ~5 s for piece fetch then resume smoothly; CPU ~7% of one core at 1080p hwdec; RAM ~390 MB; MKV duration 888.032 s parsed; hwdec=d3d11va throughout.
+
+**Bugs found and fixed this milestone:**
+1. Double `invoke_handler` call replaced the command list (frontend got "Command health not found") → single `generate_handler!` list with `#[cfg(debug_assertions)]` entry.
+2. Duplicate `let ranE2e` declarations broke App.vue compile → removed.
+3. Opaque `html/body` background hid mpv video (user report "no video only sound") → transparent body (plugin contract).
+4. `vo=gpu-next` presents black on embedded foreign HWND → switched to `vo=gpu`, verified by on-screen screenshot.
+5. DHT persisted-port bind conflict (os 10048) froze engine init twice → debug builds: no DHT + loopback-only listener; release keeps persistence (documented).
+6. Second binary made `cargo run` ambiguous → `default-run = "streamnest"`.
+7. E: disk full from target/ (17.4 GB) → `.cargo/config.toml` moves target dir to `C:\rust-targets\streamnest`.
+
+**Harness added:** `src-tauri/src/bin/seeder.rs` (create + seed + throttle upload_bps, writes .torrent files); dev E2E auto-run panel; `dev_read_test_torrent` (debug-only); Play/Pause/Seek/Volume UI + first-frame/seek telemetry; PrintWindow/foreground screenshot verification method.
+
+**Blockers:** none. (Windows Firewall prompt on release-style listeners documented as user-consent item.)
+
+---
+
 ## 2026-11-24 — M3 complete (player ACCEPTED)
 
 - tauri-plugin-libmpv v0.3.2 integrated (npm `tauri-plugin-libmpv-api` + crate + `libmpv:default` capability).

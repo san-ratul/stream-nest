@@ -19,10 +19,12 @@ Status: M3 ACCEPTED with tauri-plugin-libmpv (Strategy A). Full controls land in
 
 ## Configuration shipped
 
-- Window: `transparent: true`; player surfaces leave transparency so the mpv layer shows through; all non-player UI paints opaque backgrounds.
-- mpv initial options: `vo=gpu-next`, `hwdec=auto-safe`, `keep-open=yes`, `force-window=yes`.
+- Window: `transparent: true`; **html/body background must be transparent** (style.css) — an opaque body hides the mpv layer entirely (found via user report: "sound but no video"; screen capture confirmed).
+- **vo=gpu, NOT gpu-next**: libplacebo (gpu-next) presents a black surface when embedded into a foreign HWND on Windows; classic `vo=gpu` (D3D11) renders correctly in wid mode. Verified by on-screen screenshot. Keep for all future mpv option work.
+- mpv initial options: `vo=gpu`, `hwdec=auto-safe`, `keep-open=yes`, `force-window=yes`.
 - DLLs bundled via `bundle.resources: ["lib/**/*"]`: libmpv-2.dll = zhongfly LGPL build (2026-11-23), libmpv-wrapper.dll = plugin's wrapper.
-- Frontend wrapper: `src/composables/usePlayer.js` (init/loadfile/pause/seek/volume/observe + dev telemetry).
+- Frontend wrapper: `src/composables/usePlayer.js` (init/loadfile/pause/seek/volume/observe + first-frame/seek telemetry).
+- Tauri capability `libmpv:default` required in capabilities/default.json.
 
 ## Positioning
 
