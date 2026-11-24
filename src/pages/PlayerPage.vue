@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick } from "vue";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   playerState,
@@ -10,7 +10,6 @@ import {
   playerSeek,
   playerSetVolume,
   playerGetHwdec,
-  playerRenderDiagnostics,
   playerGetTrackList,
   playerSetAudioTrack,
   playerSetSubtitleTrack,
@@ -20,6 +19,8 @@ import {
   playerAddExternalSubtitle,
   playerSetProperty,
   playerReinit,
+  playerSetVideoMarginRatio,
+  playerRenderDiagnostics,
 } from "../composables/usePlayer";
 import { invoke } from "@tauri-apps/api/core";
 import { playerStore, mediaKey } from "../stores/player";
@@ -30,17 +31,22 @@ const volume = ref(100);
 const muted = ref(false);
 const fullscreen = ref(false);
 const speed = ref(1);
-const aspect = ref("auto");
+const aspect = ref("-1");
 const tracks = ref([]);
 const subtitleFile = ref(null);
 const controlError = ref(null);
 const resumeNote = ref(null);
 const fixApplied = ref(null);
+const scrubbing = ref(false);
+const scrubValue = ref(0);
+const surfaceRef = ref(null);
 let probeTimer = null;
 let lastTime = null;
 let stallSeconds = 0;
 let lastSaveSeconds = 0;
 let resumed = false;
+let resizeObserver = null;
+let marginsTimer = null;
 
 const appWindow = getCurrentWebviewWindow();
 
@@ -55,9 +61,19 @@ const sourceTorrent = computed(
 );
 const downloadSpeed = computed(() => sourceTorrent.value?.stats?.live?.downloaded ?? 0);
 
+const bufferedPct = computed(() => {
+  if (!playerState.duration || playerState.cacheTime == null) return 0;
+  return Math.min(100, (playerState.cacheTime / playerState.duration) * 100);
+});
+
+const timelineValue = computed(() =>
+  scrubbing.value ? scrubValue.value : (playerState.timePos ?? 0)
+);
+
 const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
 const ASPECTS = [
   { label: "auto", value: "-1" },
+  { label: "fill", value: "stretch" },
   { label: "16:9", value: "16:9" },
   { label: "4:3", value: "4:3" },
   { label: "2.35:1", value: "2.35" },
@@ -67,13 +83,34 @@ function currentMediaKey() {
   return mediaKey(playerStore.infoHash, playerStore.fileId);
 }
 
+async function updateMargins() {
+  const el = surfaceRef.value;
+  if (!el || !playerState.initialized) return;
+  await nextTick();
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 50 || rect.height < 50) return;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const ratio = {
+    left: Math.max(0, rect.left / W),
+    right: Math.max(0, (W - rect.right) / W),
+    top: Math.max(0, rect.top / H),
+    bottom: Math.max(0, (H - rect.bottom) / H),
+  };
+  try {
+    await playerSetVideoMarginRatio(ratio);
+  } catch {
+    // margins are cosmetic; retry on next resize
+  }
+}
+
 async function maybeResume() {
   if (resumed || !currentMediaKey()) return;
   try {
     const rows = await invoke("history_list", { limit: 100 });
     const row = (rows ?? []).find((r) => r.media_key === currentMediaKey());
     if (row && row.position_seconds > 30 && row.duration_seconds > 0 && row.position_seconds < row.duration_seconds * 0.95) {
-      playerSeek(row.position_seconds);
+      await playerSeek(row.position_seconds);
       resumeNote.value = `Resumed from ${fmt(row.position_seconds)}`;
       setTimeout(() => (resumeNote.value = null), 5000);
     }
@@ -143,6 +180,7 @@ async function toggleFullscreen() {
   try {
     fullscreen.value = !fullscreen.value;
     await appWindow.setFullscreen(fullscreen.value);
+    setTimeout(updateMargins, 300);
   } catch (err) {
     controlError.value = `fullscreen failed: ${err}`;
   }
@@ -150,6 +188,44 @@ async function toggleFullscreen() {
 
 async function refreshTracks() {
   tracks.value = await playerGetTrackList();
+}
+
+async function onSubtitleFile() {
+  controlError.value = null;
+  const file = subtitleFile.value?.files?.[0];
+  if (!file) return;
+  try {
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    const path = await invoke("import_subtitle", {
+      name: file.name,
+      contentsBase64: btoa(binary),
+    });
+    await playerAddExternalSubtitle(path, file.name);
+  } catch (err) {
+    controlError.value = String(err?.message ?? err);
+  }
+}
+
+function onScrubStart(e) {
+  scrubbing.value = true;
+  scrubValue.value = Number(e.target.value);
+}
+
+function onScrubMove(e) {
+  if (!scrubbing.value) return;
+  scrubValue.value = Number(e.target.value);
+}
+
+function onScrubEnd() {
+  if (!scrubbing.value) return;
+  const t = scrubValue.value;
+  scrubbing.value = false;
+  if (playerState.duration) playerSeek(t);
 }
 
 async function seekWhenReady(pos) {
@@ -176,28 +252,8 @@ async function forceSoftwareDecode() {
       await playerLoad(playerStore.src);
       if (pos > 2) await seekWhenReady(pos);
     }
+    await updateMargins();
     setTimeout(() => (fixApplied.value = null), 4000);
-  } catch (err) {
-    controlError.value = String(err?.message ?? err);
-  }
-}
-
-async function onSubtitleFile() {
-  controlError.value = null;
-  const file = subtitleFile.value?.files?.[0];
-  if (!file) return;
-  try {
-    const buf = await file.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    }
-    const path = await invoke("import_subtitle", {
-      name: file.name,
-      contentsBase64: btoa(binary),
-    });
-    await playerAddExternalSubtitle(path, file.name);
   } catch (err) {
     controlError.value = String(err?.message ?? err);
   }
@@ -207,6 +263,15 @@ onMounted(async () => {
   await playerInit();
   if (playerStore.src) await playerLoad(playerStore.src);
   await refreshTracks();
+  await updateMargins();
+  if (surfaceRef.value && typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => {
+      clearTimeout(marginsTimer);
+      marginsTimer = setTimeout(updateMargins, 120);
+    });
+    resizeObserver.observe(surfaceRef.value);
+  }
+  window.addEventListener("resize", updateMargins);
   if (currentMediaKey()) {
     invoke("library_add", {
       mediaKey: currentMediaKey(),
@@ -220,8 +285,9 @@ onMounted(async () => {
     const diag = await playerRenderDiagnostics();
     const src = sourceTorrent.value;
     const dl = src ? `${fmtBytes(src.stats?.downloaded_bytes ?? 0)}/${fmtBytes(src.stats?.total_bytes ?? 0)}` : "n/a";
+    const m = diag?.margins ?? {};
     invoke("dev_log", {
-      message: `DIAG vo=${diag?.currentVo} configured=${diag?.voConfigured} frames=${diag?.videoFrames} dispRate=${diag?.displayRate} hwdecFailed=${diag?.hwdecFailed} download=${dl}`,
+      message: `DIAG vo=${diag?.currentVo} configured=${diag?.voConfigured} margins L=${m.left?.toFixed(3)} R=${m.right?.toFixed(3)} T=${m.top?.toFixed(3)} B=${m.bottom?.toFixed(3)} download=${dl}`,
     }).catch(() => {});
     const t = playerState.timePos;
     if (!playerState.paused && playerState.duration != null) {
@@ -246,15 +312,12 @@ onMounted(async () => {
 onUnmounted(async () => {
   clearInterval(probeTimer);
   window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("resize", updateMargins);
+  if (resizeObserver) resizeObserver.disconnect();
   await saveProgress(true);
   if (fullscreen.value) appWindow.setFullscreen(false).catch(() => {});
   playerDestroy();
 });
-
-function onSeek(e) {
-  const t = Number(e.target.value);
-  if (playerState.duration) playerSeek(t);
-}
 
 function onVolume(e) {
   volume.value = Number(e.target.value);
@@ -304,101 +367,129 @@ function fmt(t) {
     </div>
   </div>
 
-  <div v-else class="flex h-full flex-col justify-end" data-player-surface>
-    <div class="absolute top-3 left-4 flex items-center gap-4 text-xs text-slate-300 drop-shadow">
-      <span class="max-w-[360px] truncate font-medium text-slate-100">{{ playerStore.title ?? "" }}</span>
-      <span>hwdec: {{ playerState.hwdec ?? "?" }}</span>
-      <span>codec: {{ playerState.videoFormat ?? "?" }}</span>
-      <span v-if="resumeNote" class="rounded bg-sky-500/20 px-2 py-0.5 text-sky-300">{{ resumeNote }}</span>
-      <span v-if="speed !== 1" class="rounded bg-violet-500/20 px-1.5 text-violet-300">{{ speed }}×</span>
-      <span v-if="playerState.buffering" class="animate-pulse rounded bg-amber-500/20 px-2 py-0.5 text-amber-300">
-        buffering…
-        <span v-if="downloadSpeed"> ({{ fmtSpeed(downloadSpeed) }})</span>
-      </span>
-      <span
-        v-else-if="playerState.cacheTime != null && playerState.timePos != null && playerState.cacheTime > playerState.timePos + 2"
-        class="text-slate-400"
-      >
-        buffered to {{ fmt(playerState.cacheTime) }}
-      </span>
-      <span v-if="playerState.error" class="text-red-400">{{ playerState.error }}</span>
+  <div v-else ref="surfaceRef" class="relative flex h-full flex-col justify-end" data-player-surface>
+    <div class="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-black/70 via-black/30 to-transparent px-5 pb-8 pt-3">
+      <div class="flex items-center gap-4 text-xs text-slate-200 drop-shadow">
+        <span class="max-w-[40%] truncate text-sm font-semibold text-white">{{ playerStore.title ?? "" }}</span>
+        <span class="rounded bg-white/10 px-1.5 py-0.5">{{ playerState.hwdec === "no" ? "sw decode" : `hwdec ${playerState.hwdec ?? "?"}` }}</span>
+        <span class="rounded bg-white/10 px-1.5 py-0.5">{{ (playerState.videoFormat ?? "?").toUpperCase() }}</span>
+        <span v-if="resumeNote" class="rounded bg-sky-500/30 px-2 py-0.5 text-sky-200">{{ resumeNote }}</span>
+        <span v-if="speed !== 1" class="rounded bg-violet-500/30 px-1.5 text-violet-200">{{ speed }}×</span>
+        <span v-if="playerState.buffering" class="animate-pulse rounded bg-amber-500/30 px-2 py-0.5 text-amber-200">
+          buffering…
+          <span v-if="downloadSpeed"> ({{ fmtSpeed(downloadSpeed) }})</span>
+        </span>
+        <span
+          v-else-if="playerState.cacheTime != null && playerState.timePos != null && playerState.cacheTime > playerState.timePos + 2"
+          class="text-slate-300"
+        >
+          buffered to {{ fmt(playerState.cacheTime) }}
+        </span>
+        <span v-if="playerState.error" class="text-red-300">{{ playerState.error }}</span>
+      </div>
     </div>
 
-    <div class="absolute top-3 right-4 z-10 flex gap-2">
+    <div class="absolute right-4 top-3 z-20 flex gap-2">
       <button
-        v-if="playerState.buffering || playerState.videoFormat"
-        class="rounded bg-amber-500/80 px-3 py-1 text-xs font-medium text-slate-950 hover:bg-amber-400"
-        title="If video stays black, switch to software decoding"
+        v-if="playerState.videoFormat"
+        class="rounded-lg bg-amber-500/80 px-3 py-1 text-xs font-medium text-slate-950 shadow hover:bg-amber-400"
+        title="If video stays black, reinitialize with software decode and 8-bit output"
         @click="forceSoftwareDecode"
       >
-        fix video (software decode)
+        fix video
       </button>
       <button
-        class="rounded bg-slate-800/90 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
+        class="rounded-lg bg-white/10 px-3 py-1 text-xs text-slate-100 shadow backdrop-blur hover:bg-white/20"
+        :title="fullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)'"
         @click="toggleFullscreen"
       >
-        {{ fullscreen ? "Exit fullscreen (F)" : "Fullscreen (F)" }}
+        {{ fullscreen ? "Exit fullscreen" : "Fullscreen" }}
       </button>
       <button
-        class="rounded bg-slate-800/90 px-3 py-1 text-xs text-slate-300 hover:bg-slate-700"
+        class="rounded-lg bg-white/10 px-3 py-1 text-xs text-slate-100 shadow backdrop-blur hover:bg-white/20"
+        title="Close player"
         @click="$router.back()"
       >
-        ✕ Close
+        ✕
       </button>
     </div>
 
-    <div class="bg-slate-900/85 px-4 py-3 backdrop-blur-sm" data-player-controls>
-      <input
-        type="range"
-        class="w-full accent-sky-400"
-        min="0"
-        :max="playerState.duration ?? 0"
-        step="0.5"
-        :value="playerState.timePos ?? 0"
-        @change="onSeek"
-      />
-      <div class="mt-2 flex flex-wrap items-center gap-3">
+    <div class="relative z-10 bg-gradient-to-t from-black/95 via-black/80 to-black/40 px-5 pb-4 pt-2 backdrop-blur-sm" data-player-controls>
+      <div class="group relative flex h-4 cursor-pointer items-center">
+        <div class="absolute inset-x-0 top-1.5 h-1 overflow-hidden rounded-full bg-white/15">
+          <div class="h-full rounded-full bg-white/25" :style="{ width: `${bufferedPct}%` }"></div>
+        </div>
+        <div
+          class="absolute left-0 top-1.5 h-1 rounded-full bg-sky-400 transition-[width] duration-150"
+          :style="{ width: `${(timelineValue / (playerState.duration || 1)) * 100}%` }"
+        ></div>
+        <input
+          type="range"
+          class="relative z-10 h-4 w-full cursor-pointer appearance-none bg-transparent
+                 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none
+                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-sky-400
+                 [&::-webkit-slider-thumb]:opacity-0 [&::-webkit-slider-thumb]:shadow
+                 [&::-webkit-slider-thumb]:transition-opacity group-hover:[&::-webkit-slider-thumb]:opacity-100"
+          min="0"
+          :max="playerState.duration ?? 0"
+          step="0.1"
+          :value="timelineValue"
+          @pointerdown="onScrubStart"
+          @input="onScrubMove"
+          @pointerup="onScrubEnd"
+          @change="onScrubEnd"
+        />
+      </div>
+
+      <div class="mt-1 flex flex-wrap items-center gap-2.5">
         <button
-          class="rounded bg-sky-500 px-4 py-1 text-sm font-medium text-slate-950 hover:bg-sky-400"
+          class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-950 shadow transition hover:bg-sky-300"
+          :title="playerState.paused ? 'Play (Space)' : 'Pause (Space)'"
           @click="playerTogglePause"
         >
-          {{ playerState.paused ? "Play" : "Pause" }}
+          <span v-if="playerState.paused" class="text-base leading-none">▶</span>
+          <span v-else class="text-base leading-none">⏸</span>
         </button>
         <button
-          class="rounded bg-slate-700 px-3 py-1 text-sm text-slate-200 hover:bg-slate-600"
+          class="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-slate-100 hover:bg-white/20"
+          title="Back 10s (←)"
           @click="playerSeek(Math.max(0, (playerState.timePos ?? 0) - 10))"
         >
-          -10s
+          −10s
         </button>
         <button
-          class="rounded bg-slate-700 px-3 py-1 text-sm text-slate-200 hover:bg-slate-600"
+          class="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-slate-100 hover:bg-white/20"
+          title="Forward 10s (→)"
           @click="playerSeek(Math.min(playerState.duration ?? 0, (playerState.timePos ?? 0) + 10))"
         >
           +10s
         </button>
-        <span class="text-sm text-slate-300">
-          {{ fmt(playerState.timePos) }} / {{ fmt(playerState.duration) }}
+        <span class="font-mono text-xs text-slate-300 tabular-nums">
+          {{ fmt(scrubbing ? scrubValue : playerState.timePos) }} / {{ fmt(playerState.duration) }}
         </span>
 
         <button
-          class="rounded bg-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-600"
-          :class="{ 'bg-violet-500/30 text-violet-200': muted }"
+          class="rounded-lg px-2 py-1.5 text-sm text-slate-100 hover:bg-white/10"
+          :class="muted ? 'text-red-300' : ''"
+          title="Mute (M)"
           @click="muted = !muted; playerSetMute(muted)"
         >
-          {{ muted ? "unmute" : "mute" }}
+          {{ muted ? "🔇" : "🔊" }}
         </button>
 
         <select
-          class="rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
+          class="rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-400"
           :value="speed"
+          title="Playback speed"
           @change="setSpeed(Number($event.target.value))"
         >
           <option v-for="s in SPEEDS" :key="s" :value="s">{{ s }}×</option>
         </select>
 
         <select
-          class="rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
+          class="rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-400"
           :value="aspect"
+          title="Aspect ratio"
           @change="setAspect($event.target.value)"
         >
           <option v-for="a in ASPECTS" :key="a.value" :value="a.value">aspect: {{ a.label }}</option>
@@ -406,27 +497,27 @@ function fmt(t) {
 
         <select
           v-if="audioTracks.length"
-          class="max-w-[160px] rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
+          class="max-w-[150px] rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"
           @change="selectAudio($event.target.value)"
         >
           <option value="" disabled selected>audio…</option>
           <option v-for="t in audioTracks" :key="t.id" :value="t.id">
-            {{ t.title || t.lang || `audio ${t.id}` }}{{ t.default ? " (default)" : "" }}
+            {{ t.title || t.lang || `audio ${t.id}` }}{{ t.default ? " ✓" : "" }}
           </option>
         </select>
 
         <select
-          class="max-w-[160px] rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
+          class="max-w-[150px] rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-slate-100 focus:outline-none"
           @change="selectSubtitle($event.target.value); $event.target.value = ''"
         >
           <option value="" disabled selected>subtitles…</option>
           <option value="off">off</option>
           <option v-for="t in subtitleTracks" :key="t.id" :value="t.id">
-            {{ t.title || t.lang || `sub ${t.id}` }}{{ t.external ? " (external)" : "" }}
+            {{ t.title || t.lang || `sub ${t.id}` }}{{ t.external ? " (ext)" : "" }}
           </option>
         </select>
 
-        <label class="cursor-pointer rounded bg-slate-800 px-2 py-1 text-xs text-slate-300 hover:bg-slate-700">
+        <label class="cursor-pointer rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-100 hover:bg-white/10">
           + load SRT
           <input ref="subtitleFile" type="file" accept=".srt,.ass,.vtt,.ssa" class="hidden" @change="onSubtitleFile" />
         </label>
@@ -435,7 +526,9 @@ function fmt(t) {
           <span class="text-xs text-slate-400">Vol</span>
           <input
             type="range"
-            class="w-24 accent-sky-400"
+            class="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-white/20
+                   [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none
+                   [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
             min="0"
             max="130"
             :value="volume"
@@ -443,7 +536,9 @@ function fmt(t) {
           />
         </div>
       </div>
-      <p v-if="controlError" class="mt-1 text-xs text-red-300">{{ controlError }}</p>
+      <p v-if="fixApplied || controlError" class="mt-1 text-xs" :class="controlError ? 'text-red-300' : 'text-emerald-300'">
+        {{ controlError ?? fixApplied }}
+      </p>
     </div>
   </div>
 </template>

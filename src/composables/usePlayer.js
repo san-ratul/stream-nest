@@ -5,6 +5,7 @@ import {
   setProperty,
   getProperty,
   observeProperties,
+  setVideoMarginRatio,
 } from "tauri-plugin-libmpv-api";
 import { invoke } from "@tauri-apps/api/core";
 import { reactive } from "vue";
@@ -168,8 +169,20 @@ export async function playerLoad(src) {
 
 export async function playerTogglePause() {
   const next = !playerState.paused;
-  await setProperty("pause", next);
-  playerState.paused = next;
+  try {
+    await setProperty("pause", next);
+  } finally {
+    try {
+      const confirmed = await getProperty("pause", "flag");
+      playerState.paused = confirmed === true;
+    } catch {
+      playerState.paused = next;
+    }
+  }
+}
+
+export async function playerSetVideoMarginRatio(ratio) {
+  await setVideoMarginRatio(ratio);
 }
 
 export async function playerSeek(seconds) {
@@ -196,15 +209,19 @@ export async function playerGetHwdec() {
 
 export async function playerRenderDiagnostics() {
   try {
-    const [voConfigured, currentVo, videoFrames, displayRate, hwdecFailed, videoDetected] = await Promise.all([
+    const [voConfigured, currentVo, videoFrames, displayRate, hwdecFailed, videoDetected, mL, mR, mT, mB] = await Promise.all([
       getProperty("vo-configured", "flag").catch(() => null),
       getProperty("current-vo", "string").catch(() => null),
       getProperty("video-out-frames", "int64").catch(() => null),
       getProperty("estimated-display-frame-rate", "double").catch(() => null),
       getProperty("hwdec-failed", "flag").catch(() => null),
       getProperty("video-detected", "flag").catch(() => null),
+      getProperty("video-margin-ratio-left", "double").catch(() => null),
+      getProperty("video-margin-ratio-right", "double").catch(() => null),
+      getProperty("video-margin-ratio-top", "double").catch(() => null),
+      getProperty("video-margin-ratio-bottom", "double").catch(() => null),
     ]);
-    return { voConfigured, currentVo, videoFrames, displayRate, hwdecFailed, videoDetected };
+    return { voConfigured, currentVo, videoFrames, displayRate, hwdecFailed, videoDetected, margins: { left: mL, right: mR, top: mT, bottom: mB } };
   } catch {
     return null;
   }
