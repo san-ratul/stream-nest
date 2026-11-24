@@ -48,6 +48,7 @@ pub fn run() {
             commands::torrent_update_only_files,
             commands::session_stats,
             commands::stream_url,
+            commands::import_subtitle,
             #[cfg(debug_assertions)]
             commands::dev_read_test_torrent,
         ]);

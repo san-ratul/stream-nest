@@ -53,6 +53,12 @@ impl From<anyhow::Error> for CommandError {
     }
 }
 
+impl From<std::io::Error> for CommandError {
+    fn from(e: std::io::Error) -> Self {
+        Self::new(e.to_string())
+    }
+}
+
 impl From<ApiError> for CommandError {
     fn from(e: ApiError) -> Self {
         Self::new(e.to_string())
@@ -251,4 +257,47 @@ pub fn dev_read_test_torrent(name: String) -> CommandResult<String> {
         path.display()
     )))?;
     Ok(general_purpose::STANDARD.encode(bytes))
+}
+
+const SUBTITLE_EXTS: [&str; 4] = ["srt", "ass", "vtt", "ssa"];
+const SUBTITLE_MAX_BYTES: usize = 2 * 1024 * 1024;
+
+#[tauri::command]
+pub fn import_subtitle(
+    state: State<'_, EngineState>,
+    name: String,
+    contents_base64: String,
+) -> CommandResult<String> {
+    let safe_name = std::path::Path::new(&name)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| CommandError::new("invalid subtitle file name"))?;
+    let ext = std::path::Path::new(safe_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if !SUBTITLE_EXTS.contains(&ext.as_str()) {
+        return Err(CommandError::new(format!(
+            "unsupported subtitle type .{ext} (allowed: srt, ass, vtt, ssa)"
+        )));
+    }
+
+    let bytes = general_purpose::STANDARD
+        .decode(contents_base64.as_bytes())
+        .map_err(|e| CommandError::new(format!("invalid base64 subtitle: {e}")))?;
+    if bytes.len() > SUBTITLE_MAX_BYTES {
+        return Err(CommandError::new("subtitle file exceeds 2 MiB limit"));
+    }
+
+    let shared = shared(&state)?;
+    let dir = shared
+        .download_dir
+        .parent()
+        .map(|p| p.join("subtitles"))
+        .unwrap_or_else(|| std::path::PathBuf::from("subtitles"));
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(safe_name);
+    std::fs::write(&path, &bytes)?;
+    Ok(path.to_string_lossy().to_string())
 }

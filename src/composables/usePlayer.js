@@ -33,6 +33,9 @@ export const playerState = reactive({
   firstFrameMs: null,
   lastSeekMs: null,
   buffering: false,
+  speed: 1,
+  muted: false,
+  aspect: "auto",
 });
 
 let unlisten = null;
@@ -167,4 +170,44 @@ export async function playerGetHwdec() {
   } catch {
     return null;
   }
+}
+
+export async function playerGetTrackList() {
+  try {
+    const v = await getProperty("track-list");
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function playerSetAudioTrack(id) {
+  await setProperty("aid", id);
+}
+
+export async function playerSetSubtitleTrack(id) {
+  await setProperty("sid", id);
+}
+
+export async function playerSetSpeed(rate) {
+  await setProperty("speed", rate);
+  playerState.speed = rate;
+}
+
+export async function playerSetAspect(value) {
+  await setProperty("video-aspect-override", value);
+  playerState.aspect = value;
+}
+
+export async function playerSetMute(muted) {
+  await setProperty("mute", muted);
+  playerState.muted = muted;
+}
+
+export async function playerAddExternalSubtitle(path, title) {
+  await command("sub-add", [path, "select", title ?? "external"]);
+}
+
+export async function playerMpvCommand(name, args) {
+  await command(name, args);
 }

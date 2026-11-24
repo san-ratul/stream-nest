@@ -4,6 +4,18 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — Phases 2–4 complete
+
+**Phase 2 (torrent management UX):** live peers panel on details (verified PeerStatsSnapshot shape from source: peers map → counters/state/conn_kind/client_name), file selection persistence via update_only_files, stream handoff to player store, download manager totals/filters/actions.
+
+**Phase 3 (streaming state UX):** buffering detection from time-pos stalls (≥2 s while unpaused), buffer-ahead display via mpv demuxer-cache-time, engine download speed shown during buffering. All values from real engine/player properties — never fabricated.
+
+**Phase 4 (player controls):** keyboard shortcuts (Space/←/→/↑/↓/M/F), fullscreen via Tauri window API (capability `core:window:allow-set-fullscreen` added), speed presets, aspect ratio presets, mute, audio track + subtitle track selectors from live `track-list`, **external SRT import** via new `import_subtitle` command (filename sanitization, extension allowlist srt/ass/vtt/ssa, 2 MiB cap, written to app-data subtitles dir, loaded through mpv sub-add). Resume playback explicitly deferred to Phase 6 (needs SQLite history).
+
+**Tests:** `cargo test` → engine_test 1 passed, streaming_test 1 passed. `npm run build` clean (181 KB JS). Watcher rebuild clean.
+
+---
+
 ## 2026-11-24 — Phase 1 complete (application foundation)
 
 - vue-router@4 added (hash history); routes for all 10 PRD screens + `/dev` harness.
