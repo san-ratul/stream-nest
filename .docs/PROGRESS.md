@@ -4,6 +4,24 @@ Chronological log. Latest first. Includes: phase status, files touched, tests ex
 
 ---
 
+## 2026-11-24 — Live UX debugging session with user (HEVC stream)
+
+Fixed in order of user reports:
+
+1. **Black video, real HEVC torrent** — root cause: AppShell opaque `<main>` over the mpv layer (plus the earlier opaque body). Fix: player route transparency. Verified: pixel metrics 0%→25%→100% non-black; screenshot shows episode rendering.
+2. **Seek drag doesn't work** — `:value` binding fought the drag. Fix: scrubbing state isolation (`@pointerdown/@input/@pointerup`).
+3. **Video cut off under sidebar** — mpv filled the whole window. Fix: `setVideoMarginRatio` computed from the player container rect (ResizeObserver + window resize + fullscreen re-apply). Verified via mpv property read-back: `video-margin-ratio-left = 0.175` = sidebar ratio.
+4. **Play button desync** — no initial `pause` sync after reloads. Fix: 1 Hz read-back of `pause` in the probe + read-back after toggle.
+5. **"aspect: fill" write failure** — `video-aspect-override` has no "stretch"; option removed.
+6. **Volume track invisible** — with `appearance-none`, WebKit only paints `::-webkit-slider-runnable-track`; styled explicitly.
+7. **See-through window ("where is video gone?")** — restore replayed a stale stream URL (per-run port/token) and the transparent route showed the desktop. Fix: torrent URLs rebuilt from identity on restore (never replayed); opaque fallback layer under the player until `vo-configured`; load-failure message after 8 s.
+
+Also verified real-swarm behavior: 580 MB torrent downloaded, hash-verified, played from complete file; file content probed from disk (valid MKV, HEVC + EAC3 tracks, 96% entropy).
+
+Final installer rebuilt with all fixes and silently reinstalled (installed exe @ 18:21). Commits: afa08ab → 871fc82.
+
+---
+
 ## 2026-11-24 — Post-MVP live testing with user (real-swarm HEVC episode)
 
 - User streamed a real 580 MB HEVC/x265 MKV via magnet. Pipeline worked end-to-end (metadata, file detection, stream URL, timeline advancing, buffering) — but video was black. Found and fixed TWO layering regressions:
