@@ -464,50 +464,48 @@ function fmt(t) {
           buffered to {{ fmt(playerState.cacheTime) }}
         </span>
         <span v-if="playerState.error" class="text-red-300">{{ playerState.error }}</span>
-
-        <div class="ml-auto flex items-center gap-2">
-        <div class="relative">
-          <button
-            class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 hover:bg-white/10"
-            title="Audio language"
-            @click="audioOpen = !audioOpen"
-          >
-            {{ selectedAudio ? langCode(selectedAudio) : "AUD" }} ▾
-          </button>
-          <div
-            v-if="audioOpen"
-            class="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-black/70 shadow-2xl shadow-black/60 backdrop-blur-xl"
-          >
-            <button
-              v-for="t in audioTracks"
-              :key="t.id"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition"
-              :class="selectedAudio?.id === t.id ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
-              @click="pickAudio(String(t.id))"
-            >
-              <span class="inline-flex h-5 min-w-7 items-center justify-center rounded bg-sky-500/20 px-1 text-[10px] font-bold text-sky-200">
-                {{ langCode(t) }}
-              </span>
-              <span class="truncate">
-                {{ t.title && t.title.toLowerCase() !== (t.lang ?? "").toLowerCase() ? t.title : (t.lang ? t.lang.toUpperCase() : `track ${t.id}`) }}{{ t.default ? " •" : "" }}
-              </span>
-            </button>
-          </div>
-        </div>
-
-          <button
-            class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 hover:bg-white/10"
-            title="Subtitles"
-            @click="subsOpen = !subsOpen"
-          >
-            CC
-            <span v-if="selectedSubId !== 'off'" class="text-sky-300">•</span>
-          </button>
-        </div>
       </div>
     </div>
 
-    <div class="absolute right-4 top-12 z-30 flex gap-2">
+    <div class="absolute right-4 top-12 z-30 flex items-center gap-2">
+      <div class="relative">
+        <button
+          class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 shadow backdrop-blur hover:bg-white/10"
+          title="Audio language"
+          @click="audioOpen = !audioOpen; subsOpen = false"
+        >
+          {{ selectedAudio ? langCode(selectedAudio) : "AUD" }} ▾
+        </button>
+        <div
+          v-if="audioOpen"
+          class="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-black/70 shadow-2xl shadow-black/60 backdrop-blur-xl"
+        >
+          <button
+            v-for="t in audioTracks"
+            :key="t.id"
+            class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition"
+            :class="selectedAudio?.id === t.id ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
+            @click="pickAudio(String(t.id))"
+          >
+            <span class="inline-flex h-5 min-w-7 items-center justify-center rounded bg-sky-500/20 px-1 text-[10px] font-bold text-sky-200">
+              {{ langCode(t) }}
+            </span>
+            <span class="truncate">
+              {{ t.title && t.title.toLowerCase() !== (t.lang ?? "").toLowerCase() ? t.title : (t.lang ? t.lang.toUpperCase() : `track ${t.id}`) }}{{ t.default ? " •" : "" }}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <button
+        class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 shadow backdrop-blur hover:bg-white/10"
+        title="Subtitles"
+        @click="subsOpen = !subsOpen; audioOpen = false"
+      >
+        CC
+        <span v-if="selectedSubId !== 'off'" class="text-sky-300">•</span>
+      </button>
+
       <button
         v-if="playerState.videoFormat"
         class="rounded-lg bg-amber-500/80 px-3 py-1 text-xs font-medium text-slate-950 shadow hover:bg-amber-400"
