@@ -501,7 +501,6 @@ pub fn search_documentaries(
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MovieDetail {
-    #[serde(flatten)]
     pub card: CatalogCard,
     pub original_title: Option<String>,
     pub release_date: Option<String>,
@@ -598,7 +597,6 @@ pub struct EpisodeRow {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct TvDetail {
-    #[serde(flatten)]
     pub card: CatalogCard,
     pub original_name: Option<String>,
     pub first_air_date: Option<String>,

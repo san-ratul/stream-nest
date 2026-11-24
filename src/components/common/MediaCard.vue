@@ -13,7 +13,7 @@ const failed = ref(false);
 const fav = ref(false);
 let mediaKey = tmdbMediaKey(props.card.media_type, props.card.tmdb_id);
 
-async function loadPoster() {
+async function loadPoster(retry = true) {
   posterUrl.value = null;
   failed.value = false;
   if (!props.card.poster_path) {
@@ -22,7 +22,14 @@ async function loadPoster() {
   }
   try {
     const url = await imageUrl(props.card.poster_path, "poster", SIZES.card);
-    posterUrl.value = url;
+    if (url) {
+      posterUrl.value = url;
+    } else if (retry) {
+      // Image proxy may still be starting right after app boot; retry once.
+      setTimeout(() => loadPoster(false), 1500);
+    } else {
+      failed.value = true;
+    }
   } catch {
     failed.value = true;
   }

@@ -67,8 +67,8 @@ pub fn local_url(info: &ImageServerInfo, kind: &str, size: &str, tmdb_path: &str
         return None;
     }
     Some(format!(
-        "http://127.0.0.1:{}/tmdb/{}/{}/{}",
-        info.port, kind, size, file
+        "http://127.0.0.1:{}/{}/tmdb/{}/{}/{}",
+        info.port, info.token, kind, size, file
     ))
 }
 
@@ -240,7 +240,7 @@ mod tests {
     fn local_url_builds_token_url_or_none() {
         let info = ImageServerInfo { port: 12345, token: Arc::new("tok".to_string()) };
         let url = local_url(&info, "poster", "w342", "/abc.jpg").unwrap();
-        assert_eq!(url, "http://127.0.0.1:12345/tmdb/poster/w342/abc.jpg");
+        assert_eq!(url, "http://127.0.0.1:12345/tok/tmdb/poster/w342/abc.jpg");
         assert!(local_url(&info, "poster", "w342", "/../etc.jpg").is_none());
         assert!(local_url(&info, "bogus", "w342", "/abc.jpg").is_none());
     }
