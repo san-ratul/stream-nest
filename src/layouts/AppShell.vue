@@ -17,12 +17,13 @@ const nav = [
   { path: "/", label: "Home", key: "1" },
   { path: "/discover", label: "Discover", key: "2" },
   { path: "/search", label: "Search", key: "3" },
-  { path: "/add", label: "Add Torrent", key: "4" },
-  { path: "/downloads", label: "Downloads", key: "5" },
-  { path: "/library", label: "Library", key: "6" },
-  { path: "/favorites", label: "Favorites", key: "7" },
-  { path: "/settings", label: "Settings", key: "8" },
-  { path: "/about", label: "About", key: "9" },
+  { path: "/add", label: "Add Source", key: "4" },
+  { path: "/sources", label: "Sources", key: "5" },
+  { path: "/downloads", label: "Downloads", key: "6" },
+  { path: "/library", label: "Library", key: "7" },
+  { path: "/favorites", label: "Favorites", key: "8" },
+  { path: "/settings", label: "Settings", key: "9" },
+  { path: "/about", label: "About", key: "0" },
 ];
 
 const activeCount = computed(() => torrentStore.torrents.filter((t) => torrentLive(t)).length);

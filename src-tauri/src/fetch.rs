@@ -2,7 +2,9 @@
 //! The fetcher never touches arbitrary hosts' private ranges, never disables TLS
 //! verification, and validates the downloaded payload as bencode metainfo.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr};
+#[cfg(test)]
+use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -33,6 +35,9 @@ pub enum UrlError {
     PrivateAddress(String),
     TooManyRedirects,
     TooLarge(u64),
+    /// Reserved for transport-level timeout mapping by callers; reqwest surfaces
+    /// timeouts as Network errors after the configured duration elapses.
+    #[allow(dead_code)]
     Timeout,
     InvalidTorrent(String),
     Network(String),

@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useRoute, useRouter } from "vue-router";
 import AppState from "../components/common/AppState.vue";
 import SourcePanel from "../components/streaming/SourcePanel.vue";
+import ManualSources from "../components/streaming/ManualSources.vue";
 import {
   imageUrl,
   SIZES,
@@ -26,6 +27,7 @@ const showId = Number(route.params.id);
 
 const detail = ref(null);
 const sources = ref([]);
+const manualSources = ref([]);
 const state = ref("loading");
 const error = ref(null);
 const posterUrl = ref(null);
@@ -116,6 +118,11 @@ async function load() {
     detail.value = res.detail;
     sources.value = res.sources ?? [];
     state.value = "ready";
+    try {
+      manualSources.value = (await invoke("source_for_tmdb", { mediaType: "tv", tmdbId: showId })) ?? [];
+    } catch {
+      manualSources.value = [];
+    }
     await loadFavorites();
     inLibrary.value = await isInLibrary(mediaKey);
     try {
@@ -208,6 +215,29 @@ const episodePlayTarget = ref(null);
 
 function openEpisodeSource(seasonNumber, episodeNumber, name) {
   episodePlayTarget.value = { season: seasonNumber, episode: episodeNumber, name };
+}
+
+function addSourceForShow(seasonNumber = null, episodeNumber = null) {
+  let query = `?type=tv&id=${showId}&tab=magnet`;
+  if (seasonNumber != null) query += `&season=${seasonNumber}`;
+  if (episodeNumber != null) query += `&episode=${episodeNumber}`;
+  router.push(`/add${query}`);
+}
+
+async function reloadManualSources() {
+  try {
+    manualSources.value = (await invoke("source_for_tmdb", { mediaType: "tv", tmdbId: showId })) ?? [];
+  } catch {
+    manualSources.value = [];
+  }
+}
+
+async function onManualChanged(evt) {
+  if (evt?.action === "played") {
+    router.push("/player");
+    return;
+  }
+  await reloadManualSources();
 }
 
 onMounted(() => {
@@ -321,7 +351,7 @@ onMounted(() => {
                 <div class="text-sm font-semibold text-slate-200">No authorized in-app source</div>
                 <p class="mt-1 text-xs leading-5 text-slate-400">
                   Episode playback activates only when an authorized, rights-verified source exists.
-                  TMDB metadata never implies distribution rights.
+                  You can also add a source yourself below and link it to the show or a specific episode.
                 </p>
                 <div v-if="pageSources.length" class="mt-3 flex flex-col gap-2">
                   <div v-for="s in pageSources" :key="s.provider_id" class="rounded-md border border-slate-700/60 bg-slate-900/50 p-3">
@@ -341,6 +371,14 @@ onMounted(() => {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <div class="mt-5 max-w-2xl">
+                <ManualSources
+                  :records="manualSources"
+                  @changed="onManualChanged"
+                  @open-add="addSourceForShow()"
+                />
               </div>
             </div>
           </div>
@@ -420,6 +458,13 @@ onMounted(() => {
                             @click="openEpisodeSource(s.season_number, ep.episode_number, ep.name)"
                           >
                             ▶ Play
+                          </button>
+                          <button
+                            v-if="!playableSources.length"
+                            class="ml-auto shrink-0 rounded bg-slate-700/60 px-2 py-0.5 text-[11px] font-medium text-slate-300 hover:bg-slate-700"
+                            @click="addSourceForShow(s.season_number, ep.episode_number)"
+                          >
+                            + Source
                           </button>
                         </div>
                         <div class="text-xs text-slate-500">{{ ep.air_date || "No air date" }}</div>

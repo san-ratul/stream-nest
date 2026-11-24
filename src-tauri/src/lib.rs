@@ -124,6 +124,7 @@ pub fn run() {
             metadata::catalog_card_lookup,
             playback::playback_prepare_uri,
             playback::playback_prepare_file,
+            playback::playback_prepare_record,
             playback::episode_matches,
             playback::playback_begin,
             playback::playback_end,

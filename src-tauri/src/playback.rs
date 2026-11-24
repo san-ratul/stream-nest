@@ -379,6 +379,44 @@ pub async fn playback_prepare_file(
 }
 
 #[tauri::command]
+pub async fn playback_prepare_record(
+    db: State<'_, Db>,
+    engine: State<'_, EngineState>,
+    app: AppHandle,
+    source_id: i64,
+) -> Result<PreparedPlayback, String> {
+    use crate::source_library::{get as source_get, set_hash_and_meta, touch as source_touch};
+    let record = {
+        let conn = db.0.lock();
+        source_get(&conn, source_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Source not found".to_string())?
+    };
+    let shared = engine_shared(&engine)?;
+    let stage = move |s: &str| {
+        let _ = app.emit("playback:stage", s.to_string());
+    };
+    let input = if let Some(uri) = record.magnet_uri.clone() {
+        SourceInput::Magnet { uri, peers: vec![] }
+    } else if let Some(path) = record.torrent_file_path.clone() {
+        // Paths stored by the app itself in its own data dir; never from JS input.
+        let bytes = std::fs::read(&path)
+            .map_err(|e| format!("cannot read stored torrent copy: {e}"))?;
+        SourceInput::TorrentBytes { bytes, peers: vec![] }
+    } else {
+        return Err("This source has no streamable input stored".to_string());
+    };
+    let prepared = prepare_core(&shared, &db, input, Some(&stage)).await?;
+    // Record the resolved identity + usage.
+    {
+        let conn = db.0.lock();
+        let _ = set_hash_and_meta(&conn, source_id, &prepared.info_hash, Some(prepared.videos.iter().map(|v| v.size_bytes).sum::<u64>() as i64), None, None);
+        let _ = source_touch(&conn, source_id);
+    }
+    Ok(prepared)
+}
+
+#[tauri::command]
 pub async fn episode_matches(
     engine: State<'_, EngineState>,
     info_hash: String,

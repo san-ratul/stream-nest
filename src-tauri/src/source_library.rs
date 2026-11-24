@@ -9,7 +9,7 @@ use std::time::Duration;
 use base64::{Engine as _, engine::general_purpose};
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::State;
 
 use crate::{
     engine::EngineState,
@@ -46,6 +46,10 @@ pub struct SourceRecord {
 }
 
 const SOURCE_TYPES: [&str; 5] = ["magnet", "torrent_url", "torrent_file", "provider_page", "official"];
+#[allow(dead_code)]
+fn is_known_source_type(t: &str) -> bool {
+    SOURCE_TYPES.contains(&t)
+}
 
 fn row_to_record(r: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRecord> {
     Ok(SourceRecord {
@@ -445,7 +449,6 @@ pub struct ResolvedPage {
 /// there is no generic website scraping.
 #[tauri::command]
 pub async fn source_resolve_page(
-    db: State<'_, Db>,
     url: String,
     context: Option<SourceContext>,
 ) -> CmdResult<ResolvedPage> {

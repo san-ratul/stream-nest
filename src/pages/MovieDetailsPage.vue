@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useRoute, useRouter } from "vue-router";
 import AppState from "../components/common/AppState.vue";
 import SourcePanel from "../components/streaming/SourcePanel.vue";
+import ManualSources from "../components/streaming/ManualSources.vue";
 import {
   imageUrl,
   SIZES,
@@ -26,6 +27,7 @@ const movieId = Number(route.params.id);
 
 const detail = ref(null);
 const sources = ref([]);
+const manualSources = ref([]);
 const state = ref("loading");
 const error = ref(null);
 const posterUrl = ref(null);
@@ -70,6 +72,26 @@ async function onPlay(source) {
   }
 }
 
+function addSourceForThisMovie() {
+  router.push(`/add?type=movie&id=${movieId}&tab=magnet`);
+}
+
+async function reloadManualSources() {
+  try {
+    manualSources.value = (await invoke("source_for_tmdb", { mediaType: "movie", tmdbId: movieId })) ?? [];
+  } catch {
+    manualSources.value = [];
+  }
+}
+
+async function onManualChanged(evt) {
+  if (evt?.action === "played") {
+    router.push("/player");
+    return;
+  }
+  await reloadManualSources();
+}
+
 async function load() {
   state.value = "loading";
   error.value = null;
@@ -78,6 +100,11 @@ async function load() {
     detail.value = res.detail;
     sources.value = res.sources ?? [];
     state.value = "ready";
+    try {
+      manualSources.value = (await invoke("source_for_tmdb", { mediaType: "movie", tmdbId: movieId })) ?? [];
+    } catch {
+      manualSources.value = [];
+    }
     await loadFavorites();
     inLibrary.value = await isInLibrary(mediaKey);
     try {
@@ -283,7 +310,7 @@ function cancelChooser() {
                 <div class="text-sm font-semibold text-slate-200">No authorized in-app source</div>
                 <p class="mt-1 text-xs leading-5 text-slate-400">
                   TMDB provides metadata only — it does not grant streaming or distribution rights.
-                  StreamNest never attaches unauthorized torrent sources to catalog titles.
+                  You can still add a source yourself below (magnet link, torrent URL or file).
                 </p>
                 <div v-if="pageSources.length" class="mt-3 flex flex-col gap-2">
                   <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Verified official sources</div>
@@ -305,6 +332,14 @@ function cancelChooser() {
                     <p v-if="s.attribution" class="mt-2 text-[11px] text-slate-500">{{ s.attribution }}</p>
                   </div>
                 </div>
+              </div>
+
+              <div class="mt-5 max-w-2xl">
+                <ManualSources
+                  :records="manualSources"
+                  @changed="onManualChanged"
+                  @open-add="addSourceForThisMovie"
+                />
               </div>
 
               <div v-if="historyRow" class="mt-5 rounded-lg border border-slate-700/60 bg-slate-800/40 p-4">

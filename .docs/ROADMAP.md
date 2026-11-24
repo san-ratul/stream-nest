@@ -52,6 +52,14 @@ Status legend: [ ] pending · [~] in progress · [x] complete · [!] blocked
 - [x] 78 automated tests incl. deterministic in-process pipeline test
 - [ ] Future: authorized TV sources; more rights-verified providers
 
+## Phase 2C — Universal Source Management — [x] IMPLEMENTED (same feature branch)
+
+- [x] Unified Add Source: magnet / torrent URL (SSRF-safe fetcher) / local file / provider page (Internet Archive)
+- [x] Schema v3 `media_sources`: upsert-by-hash duplicates, TMDB + episode association, last-used tracking
+- [x] Sources library page + ManualSources blocks on details pages; engine-reuse quick check
+- [x] Settings: URL size / redirects / timeout; 89 automated tests green
+- [ ] Future: more provider-page adapters; permitted automatic search providers
+
 ## Benchmark targets vs measured (reference: i7-14700K / 31.8 GB / Win 11 26300)
 
 - First frame: target ≤ ~15 s well-seeded → measured 276–374 ms (1.1 GB @ 3 MB/s throttle) — PASS

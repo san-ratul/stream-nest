@@ -29,6 +29,7 @@ const db = computed(() => catalogStore.status?.db ?? null);
 
 onMounted(async () => {
   await loadCatalogStatus();
+  await loadSourceSettings();
   try {
     const rows = await invoke("settings_get_all");
     const saved = Object.fromEntries(rows ?? []);
@@ -92,6 +93,32 @@ async function onPages(e) {
     await setSyncPages(v);
   } catch (err) {
     console.warn("pages setting failed", err);
+  }
+}
+
+// ---- Source management settings ----
+const sourceSettings = ref({});
+
+async function loadSourceSettings() {
+  try {
+    const rows = await invoke("settings_get_all");
+    sourceSettings.value = Object.fromEntries(rows ?? []);
+  } catch {
+    sourceSettings.value = {};
+  }
+}
+
+function sourceSetting(key, fallback) {
+  const v = sourceSettings.value[key];
+  return v != null ? Number(v) : fallback;
+}
+
+async function setSourceSetting(key, value) {
+  try {
+    await invoke("settings_set", { key, value: String(value) });
+    await loadSourceSettings();
+  } catch (err) {
+    console.warn("source setting failed", err);
   }
 }
 
@@ -206,6 +233,54 @@ function fmtTime(t) {
         <p class="mt-2 text-[11px] leading-4 text-slate-500">
           Clearing removes synchronized TMDB metadata and cached images only — history, favorites,
           library and torrents are preserved. The API key is never displayed or stored in the UI.
+        </p>
+      </section>
+
+      <section class="rounded-lg border border-slate-700/60 bg-slate-800/40 p-4">
+        <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Source management</h2>
+        <p class="mb-3 text-xs text-slate-500">
+          Controls for manual torrent source input (magnet, torrent URL, file, provider page).
+        </p>
+        <div class="flex flex-col gap-3 text-sm">
+          <label class="flex items-center justify-between gap-3">
+            <span class="text-slate-300">Max torrent URL download size</span>
+            <select
+              class="rounded-md border border-slate-700 bg-slate-800/60 px-2 py-1 text-xs text-slate-100 focus:border-sky-500 focus:outline-none"
+              :value="sourceSetting('source.max_url_bytes', 10485760)"
+              @change="setSourceSetting('source.max_url_bytes', Number($event.target.value))"
+            >
+              <option :value="1048576">1 MB</option>
+              <option :value="10485760">10 MB</option>
+              <option :value="33554432">32 MB</option>
+              <option :value="67108864">64 MB</option>
+            </select>
+          </label>
+          <label class="flex items-center justify-between gap-3">
+            <span class="text-slate-300">Max redirects</span>
+            <input
+              type="number"
+              min="0"
+              max="10"
+              class="w-16 rounded-md border border-slate-700 bg-slate-800/60 px-2 py-1 text-xs text-slate-100 focus:border-sky-500 focus:outline-none"
+              :value="sourceSetting('source.max_redirects', 5)"
+              @change="setSourceSetting('source.max_redirects', Number($event.target.value))"
+            />
+          </label>
+          <label class="flex items-center justify-between gap-3">
+            <span class="text-slate-300">Torrent URL timeout (seconds)</span>
+            <input
+              type="number"
+              min="5"
+              max="120"
+              class="w-16 rounded-md border border-slate-700 bg-slate-800/60 px-2 py-1 text-xs text-slate-100 focus:border-sky-500 focus:outline-none"
+              :value="sourceSetting('source.timeout_secs', 30)"
+              @change="setSourceSetting('source.timeout_secs', Number($event.target.value))"
+            />
+          </label>
+        </div>
+        <p class="mt-3 text-[11px] leading-4 text-slate-500">
+          Remote torrent fetching enforces http(s)-only schemes, blocks private/local/metadata
+          addresses, re-validates every redirect and never disables TLS verification.
         </p>
       </section>
 

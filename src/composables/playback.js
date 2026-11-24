@@ -162,3 +162,90 @@ export function endPlaybackSession(mediaKey) {
     invoke("playback_end", { mediaKey }).catch(() => {});
   }
 }
+
+/**
+ * Streams a persisted source record (from the Source Library or details pages).
+ * The record's stored input (magnet/ torrent copy) is resolved inside Rust.
+ */
+export async function startRecordPlayback(record, { onNeedFileChoice, title } = {}) {
+  playbackStore.error = null;
+  playbackStore.stage = "connecting";
+  try {
+    const prepared = await invoke("playback_prepare_record", { sourceId: record.id });
+    playbackStore.prepared = prepared;
+    playbackStore.stage = "files";
+    const videos = prepared.videos ?? [];
+    if (!videos.length) throw new Error("No playable video file found in this source");
+
+    let fileId = null;
+    let fileTitle = null;
+
+    // Episode association on the record → metadata match first.
+    const isEpisode = record.tmdb_media_type === "tv" && record.season_number != null && record.episode_number != null;
+    if (isEpisode) {
+      const matches = await invoke("episode_matches", {
+        infoHash: prepared.info_hash,
+        season: record.season_number,
+        episode: record.episode_number,
+      }).catch(() => []);
+      const top = matches[0];
+      const clearWinner =
+        top && top.confidence >= 80 && (matches.length === 1 || top.confidence - matches[1].confidence >= 5);
+      if (clearWinner) {
+        fileId = top.file_index;
+        fileTitle = top.name;
+      }
+    }
+
+    if (fileId == null && videos.length === 1 && !isEpisode) {
+      fileId = videos[0].file_index;
+      fileTitle = videos[0].name;
+    }
+
+    if (fileId == null) {
+      if (!onNeedFileChoice) {
+        playbackStore.stage = null;
+        return { needsFileChoice: true, prepared, videos, record };
+      }
+      fileId = await onNeedFileChoice(videos);
+      if (fileId == null) {
+        playbackStore.stage = null;
+        return { cancelled: true };
+      }
+      fileTitle = videos.find((v) => v.file_index === fileId)?.name ?? title;
+    }
+
+    playbackStore.stage = "starting";
+    const tmdbKey =
+      record.tmdb_media_type === "movie" && record.tmdb_id
+        ? `tmdb:movie:${record.tmdb_id}`
+        : record.tmdb_media_type === "tv" && record.tmdb_id
+          ? record.season_number != null && record.episode_number != null
+            ? `tmdb:tv:${record.tmdb_id}:${record.season_number}:${record.episode_number}`
+            : `tmdb:tv:${record.tmdb_id}`
+          : null;
+
+    await invoke("playback_begin", {
+      mediaKey: tmdbKey ?? `${prepared.info_hash}:${fileId}`,
+      infoHash: prepared.info_hash,
+      fileId,
+      sourceId: record.provider_key ?? `source:${record.id}`,
+    });
+    const url = await streamUrl(prepared.info_hash, fileId);
+    openInPlayer({
+      src: url,
+      title: fileTitle ?? title ?? record.display_name,
+      torrentId: prepared.info_hash,
+      fileId,
+      infoHash: prepared.info_hash,
+      tmdbKey,
+    });
+    playbackStore.stage = null;
+    return { started: true };
+  } catch (err) {
+    playbackStore.stage = null;
+    const friendly = friendlyError(err);
+    playbackStore.error = friendly;
+    throw new Error(friendly);
+  }
+}
