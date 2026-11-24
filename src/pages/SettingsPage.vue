@@ -119,11 +119,21 @@ function fmtTime(t) {
             :class="catalogStore.status?.has_api_key ? 'bg-emerald-400' : 'bg-red-400'"
           ></span>
           <span :class="catalogStore.status?.has_api_key ? 'text-slate-300' : 'text-red-300'">
-            {{ catalogStore.status?.has_api_key ? "TMDB configured" : "TMDB API key missing (.env)" }}
+            {{ catalogStore.status?.has_api_key ? "TMDB configured" : "TMDB API key missing" }}
           </span>
           <span class="ml-auto text-xs text-slate-500">
             {{ db ? `${db.movies} movies · ${db.tv_shows} shows` : "catalog unavailable" }}
           </span>
+        </div>
+
+        <div v-if="catalogStore.status && !catalogStore.status.has_api_key"
+          class="mb-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          Place a <code class="rounded bg-black/30 px-1">.env</code> file with
+          <code class="rounded bg-black/30 px-1">TMDB_API_KEY=your_key</code> in one of:
+          <div class="mt-1 flex flex-col gap-0.5">
+            <code v-for="p in catalogStore.status.env_paths ?? []" :key="p" class="truncate">{{ p }}</code>
+          </div>
+          Restart the app afterwards.
         </div>
 
         <div v-if="db?.last_sync" class="mb-3 rounded-md border border-slate-700/60 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">

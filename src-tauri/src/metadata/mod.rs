@@ -278,6 +278,8 @@ pub struct CatalogStatusResponse {
     pub db: repo::SyncStatus,
     pub phase: SyncPhase,
     pub provider_note: String,
+    /// Ordered `.env` locations the app checks for TMDB_API_KEY (display only).
+    pub env_paths: Vec<String>,
 }
 
 #[tauri::command]
@@ -289,12 +291,21 @@ pub fn catalog_status(
     let mut status = repo::sync_status(&conn)?;
     status.has_api_key = tmdb.client.is_some();
     let phase = tmdb.sync.phase.lock().clone();
+    let env_paths = metadata_paths(&tmdb);
     Ok(CatalogStatusResponse {
         has_api_key: status.has_api_key,
         db: status,
         phase,
         provider_note: tmdb.sources.note().to_string(),
+        env_paths,
     })
+}
+
+fn metadata_paths(tmdb: &State<'_, TmdbState>) -> Vec<String> {
+    config::candidate_paths(Some(&tmdb.data_dir))
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect()
 }
 
 /// Starts a full synchronization if none is running. Returns immediately;

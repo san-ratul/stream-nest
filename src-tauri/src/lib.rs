@@ -41,10 +41,16 @@ pub fn run() {
 
             // TMDB metadata stack: client only when a key is configured; the key
             // never reaches the frontend and never appears in logs.
-            let api_key = metadata::config::load_tmdb_api_key();
+            // Installed apps look for .env in the app-data dir first, then CWD/exe dirs.
+            let api_key = metadata::config::load_tmdb_api_key_from(&metadata::config::candidate_paths(
+                Some(&data_dir),
+            ));
             let client = match api_key {
                 Some(key) => match metadata::build_client(key) {
-                    Ok(c) => Some(c),
+                    Ok(c) => {
+                        log::info!("TMDB client configured (API key loaded)");
+                        Some(c)
+                    }
                     Err(e) => {
                         log::warn!("TMDB client init failed: {e}");
                         None

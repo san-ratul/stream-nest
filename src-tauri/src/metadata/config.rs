@@ -59,6 +59,21 @@ pub fn env_candidates() -> Vec<std::path::PathBuf> {
 }
 
 pub fn load_tmdb_api_key() -> Option<String> {
+    load_tmdb_api_key_from(&env_candidates())
+}
+
+/// Ordered `.env` candidates for a given app-data directory (installed apps):
+/// app data first, then CWD/parent and exe-dir/parent.
+pub fn candidate_paths(data_dir: Option<&std::path::Path>) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    if let Some(dir) = data_dir {
+        out.push(dir.join(".env"));
+    }
+    out.extend(env_candidates());
+    out
+}
+
+pub fn load_tmdb_api_key_from(paths: &[std::path::PathBuf]) -> Option<String> {
     // Environment variable takes precedence (set by wrapper scripts, never committed).
     if let Ok(v) = std::env::var("TMDB_API_KEY") {
         let v = v.trim().to_string();
@@ -66,7 +81,7 @@ pub fn load_tmdb_api_key() -> Option<String> {
             return Some(v);
         }
     }
-    read_env_file_value(&env_candidates(), "TMDB_API_KEY")
+    read_env_file_value(paths, "TMDB_API_KEY")
 }
 
 #[cfg(test)]
@@ -100,5 +115,26 @@ mod tests {
     #[test]
     fn missing_key_is_none() {
         assert_eq!(parse_env_key("OTHER=y", "TMDB_API_KEY"), None);
+    }
+
+    #[test]
+    fn candidate_paths_put_app_data_first() {
+        let paths = candidate_paths(Some(std::path::Path::new("C:\\appdata\\streamnest")));
+        assert_eq!(
+            paths[0],
+            std::path::PathBuf::from("C:\\appdata\\streamnest\\.env")
+        );
+        assert!(paths.len() > 1, "fallback candidates remain");
+    }
+
+    #[test]
+    fn loads_from_explicit_path_list() {
+        let dir = std::env::temp_dir().join(format!("streamnest_env_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(".env");
+        std::fs::write(&path, "TMDB_API_KEY=file-key\n").unwrap();
+        let loaded = load_tmdb_api_key_from(&[path.clone()]);
+        std::fs::remove_file(&path).ok();
+        assert_eq!(loaded, Some("file-key".to_string()));
     }
 }

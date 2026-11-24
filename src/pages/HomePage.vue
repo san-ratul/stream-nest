@@ -177,8 +177,12 @@ async function triggerSync() {
       <div v-if="catalogStore.status && !catalogStore.status.has_api_key"
         class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
         Metadata discovery is inactive: no TMDB API key configured.
-        Add <code class="rounded bg-black/30 px-1">TMDB_API_KEY=...</code> to your <code class="rounded bg-black/30 px-1">.env</code> and restart,
-        then run a sync from Settings.
+        Create a <code class="rounded bg-black/30 px-1">.env</code> file at one of these locations containing
+        <code class="rounded bg-black/30 px-1">TMDB_API_KEY=your_key</code>, then restart the app:
+        <div class="mt-1.5 flex flex-col gap-0.5 text-xs text-amber-200/80">
+          <code v-for="p in catalogStore.status.env_paths ?? []" :key="p" class="truncate">{{ p }}</code>
+        </div>
+        Then run a sync from Settings.
       </div>
       <div v-else-if="catalogStore.status && catalogStore.status.db.movies === 0 && catalogStore.status.db.tv_shows === 0 && !isSyncRunning()"
         class="flex items-center justify-between rounded-lg border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">

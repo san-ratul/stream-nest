@@ -61,6 +61,17 @@ retry up to 3 attempts with backoff; 429 honors `Retry-After` (capped at 30 s).
 5. Without a key the app runs in local-only mode: existing MVP features are unaffected and the
    UI shows an explanatory banner instead of empty discovery sections.
 
+### Installed app (NSIS build)
+
+The installed exe checks these `.env` locations **in order** (the Home banner and Settings
+list the exact paths for the running instance):
+
+1. `%APPDATA%\app.streamnest.desktop\.env` — **recommended for the installed app**
+2. Current working directory / its parent
+3. Executable directory / its parent (e.g. `%LOCALAPPDATA%\StreamNest\.env`)
+
+An environment variable `TMDB_API_KEY` always takes precedence over any file.
+
 **Distribution note:** a key embedded in a shipped desktop app is NOT secret — anyone can
 extract it from the binary. For a distributed build, run a server-side proxy that holds the key
 and issues metadata/images to clients. StreamNest's architecture isolates the key in the Rust
