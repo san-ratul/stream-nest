@@ -44,6 +44,7 @@ const surfaceRef = ref(null);
 const controlsRef = ref(null);
 const subsOpen = ref(false);
 const aspectOpen = ref(false);
+const audioOpen = ref(false);
 let probeTimer = null;
 let lastTime = null;
 let stallSeconds = 0;
@@ -58,7 +59,7 @@ const appWindow = getCurrentWebviewWindow();
 
 const audioTracks = computed(() => tracks.value.filter((t) => t.type === "audio"));
 const subtitleTracks = computed(() => tracks.value.filter((t) => t.type === "sub"));
-const selectedAudioId = computed(() => audioTracks.value.find((t) => t.selected)?.id ?? "");
+const selectedAudio = computed(() => audioTracks.value.find((t) => t.selected));
 const selectedSubId = computed(() => {
   const s = subtitleTracks.value.find((t) => t.selected);
   return s ? String(s.id) : "off";
@@ -88,21 +89,6 @@ const ASPECTS = [
   { label: "4:3", value: "4:3" },
   { label: "2.35:1", value: "2.35" },
 ];
-
-const FLAG_BY_LANG = {
-  en: "🇬🇧", it: "🇮🇹", ja: "🇯🇵", fr: "🇫🇷", de: "🇩🇪", es: "🇪🇸",
-  pt: "🇵🇹", ru: "🇷🇺", ar: "🇸🇦", cs: "🇨🇿", ko: "🇰🇷", zh: "🇨🇳",
-  hi: "🇮🇳", nl: "🇳🇱", pl: "🇵🇱", tr: "🇹🇷", sv: "🇸🇪", da: "🇩🇰",
-  fi: "🇫🇮", no: "🇳🇴", el: "🇬🇷", he: "🇮🇱", th: "🇹🇭", hu: "🇭🇺",
-  ro: "🇷🇴", bg: "🇧🇬", uk: "🇺🇦", id: "🇮🇩", vi: "🇻🇳", ms: "🇲🇾",
-};
-
-function langFlag(t) {
-  const raw = String(t?.lang ?? "").toLowerCase();
-  const code3 = raw.match(/^([a-z]{2,3})/)?.[1] ?? "";
-  const code2 = code3 === "eng" ? "en" : code3;
-  return FLAG_BY_LANG[code2] ?? "🏳";
-}
 
 function langCode(t) {
   const raw = t?.lang || t?.title || "";
@@ -200,12 +186,10 @@ async function saveProgress(final = false) {
 function onKeydown(e) {
   const tag = document.activeElement?.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-  if (e.key === "Escape" && subsOpen.value) {
+  if (e.key === "Escape") {
     subsOpen.value = false;
-    return;
-  }
-  if (e.key === "Escape" && aspectOpen.value) {
     aspectOpen.value = false;
+    audioOpen.value = false;
     return;
   }
   switch (e.key) {
@@ -328,12 +312,16 @@ async function forceSoftwareDecode() {
 }
 
 function pickAudio(id) {
-  if (id !== "") playerSetAudioTrack(id).catch((err) => (controlError.value = String(err)));
+  if (id !== "") {
+    playerSetAudioTrack(id).catch((err) => (controlError.value = String(err)));
+  }
+  audioOpen.value = false;
 }
 
 function pickSubtitle(id) {
   const value = id === "off" ? "no" : id;
   playerSetSubtitleTrack(value).catch((err) => (controlError.value = String(err)));
+  subsOpen.value = false;
 }
 
 onMounted(async () => {
@@ -478,17 +466,34 @@ function fmt(t) {
         <span v-if="playerState.error" class="text-red-300">{{ playerState.error }}</span>
 
         <div class="ml-auto flex items-center gap-2">
-          <select
-            v-if="audioTracks.length"
-            class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 focus:outline-none focus:ring-1 focus:ring-sky-400"
-            :value="selectedAudioId"
+        <div class="relative">
+          <button
+            class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 hover:bg-white/10"
             title="Audio language"
-            @change="pickAudio($event.target.value)"
+            @click="audioOpen = !audioOpen"
           >
-            <option v-for="t in audioTracks" :key="t.id" :value="t.id">
-              {{ langFlag(t) }} {{ langCode(t) }}{{ t.default ? " •" : "" }}
-            </option>
-          </select>
+            {{ selectedAudio ? langCode(selectedAudio) : "AUD" }} ▾
+          </button>
+          <div
+            v-if="audioOpen"
+            class="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-black/70 shadow-2xl shadow-black/60 backdrop-blur-xl"
+          >
+            <button
+              v-for="t in audioTracks"
+              :key="t.id"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition"
+              :class="selectedAudio?.id === t.id ? 'bg-sky-500/30 text-sky-200' : 'text-slate-200 hover:bg-white/10'"
+              @click="pickAudio(String(t.id))"
+            >
+              <span class="inline-flex h-5 min-w-7 items-center justify-center rounded bg-sky-500/20 px-1 text-[10px] font-bold text-sky-200">
+                {{ langCode(t) }}
+              </span>
+              <span class="truncate">
+                {{ t.title && t.title.toLowerCase() !== (t.lang ?? "").toLowerCase() ? t.title : (t.lang ? t.lang.toUpperCase() : `track ${t.id}`) }}{{ t.default ? " •" : "" }}
+              </span>
+            </button>
+          </div>
+        </div>
 
           <button
             class="rounded-lg border border-white/10 bg-black/50 px-2 py-1 text-xs font-medium tracking-wide text-slate-100 hover:bg-white/10"
